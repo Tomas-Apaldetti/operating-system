@@ -16,7 +16,10 @@ Contains caseSensitiveFlag(char *argv[], char **searchTerm);
 
 int find(char *searchTerm, Contains contains);
 
-int findInDir(DIR *dir, char *searchTerm, Contains contains, char *dirName);
+int findInDir(DIR *dir,
+              char *searchTerm,
+              Contains contains,
+              char dirName[MAX_STR_SIZE]);
 
 void formDir(char destiny[MAX_STR_SIZE], char *base, char *toAdd);
 
@@ -74,33 +77,28 @@ findInDir(DIR *dir, char *searchTerm, Contains contains, char dirName[MAX_STR_SI
 	struct dirent *entry;
 	errno = 0;
 	while ((entry = readdir(dir))) {
-		switch (entry->d_type) {
-		case DT_DIR: {
-			if (strcmp(entry->d_name, ".") == 0 ||
-			    strcmp(entry->d_name, "..") == 0)
-				break;
+		
+		if (strcmp(entry->d_name, ".") == 0 ||
+		    strcmp(entry->d_name, "..") == 0)
+			continue;
+
+		char complete[2048];
+		formDir(complete, dirName, entry->d_name);
+		if (contains(entry->d_name, searchTerm))
+			printf("%s\n", complete);
+
+		if (entry->d_type == DT_DIR) {
 			int result = openat(dirfd(dir), entry->d_name, 0);
 			if (result < 0) {
 				perror("Error al leer un directorio");
 				errno = 0;
 				errAmnt++;
-				break;
+			} else {
+				errAmnt += findInDir(fdopendir(result),
+				                     searchTerm,
+				                     contains,
+				                     complete);
 			}
-			char newBase[MAX_STR_SIZE];
-			formDir(newBase, dirName, entry->d_name);
-			errAmnt += findInDir(
-			        fdopendir(result), searchTerm, contains, newBase);
-			break;
-		}
-
-		case DT_REG: {
-			if (contains(entry->d_name, searchTerm))
-				printf("%s/%s\n", dirName, entry->d_name);
-			break;
-		}
-
-		default:
-			break;
 		}
 	}
 
