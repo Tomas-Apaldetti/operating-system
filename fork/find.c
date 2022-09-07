@@ -77,7 +77,6 @@ findInDir(DIR *dir, char *searchTerm, Contains contains, char dirName[MAX_STR_SI
 	struct dirent *entry;
 	errno = 0;
 	while ((entry = readdir(dir))) {
-		
 		if (strcmp(entry->d_name, ".") == 0 ||
 		    strcmp(entry->d_name, "..") == 0)
 			continue;
@@ -98,6 +97,7 @@ findInDir(DIR *dir, char *searchTerm, Contains contains, char dirName[MAX_STR_SI
 				                     searchTerm,
 				                     contains,
 				                     complete);
+				close(result);
 			}
 		}
 	}
