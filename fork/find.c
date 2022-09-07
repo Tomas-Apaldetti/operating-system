@@ -9,6 +9,7 @@
 #include <dirent.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <unistd.h>
 
 typedef char *(*Contains)(const char *haystack, const char *needle);
 
