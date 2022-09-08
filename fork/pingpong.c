@@ -126,8 +126,7 @@ parentTask(int listenPipe[2], int writePipe[2], int forkResult)
 	printf("Hola, de nuevo PID <%d>:\n", pid);
 	printf("  - recibí valor <%ld> vía fd=%d\n", received, listenPipe[READ]);
 
-	pid_t result = wait(NULL);
-	if (result < 0) {
+	if (wait(NULL) < 0) {
 		perror("Error mientras esperaba al hijo");
 		exit(-1);
 	}
