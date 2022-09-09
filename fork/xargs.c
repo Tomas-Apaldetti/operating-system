@@ -36,16 +36,16 @@ main(int argc, char *argv[])
 			args[i + 1][strcspn(args[i + 1], "\n")] = 0;
 			i++;
 		}
-		if (errno != EINVAL || errno != ENOMEM) {
+		if (errno == EINVAL || errno == ENOMEM) {
 			// getline errors
+			perror("lab-xargs: error while reading");
 			cleanArgs(args);
 			exit(-1);
 		}
 
 		if (getlineRes == -1) {
 			// When EOF happens, getline reads garbage, and it does
-			// not enter the while loop Therefore, outside of the
-			// look needs to be checked
+			// not enter the while loop. Outside of the loop need to be checked
 			free(args[i + 1]);
 			args[i + 1] = NULL;
 		}
