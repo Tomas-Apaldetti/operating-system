@@ -64,10 +64,7 @@ find(char *searchTerm, Contains contains)
 	char base[MAX_STR_SIZE];
 	strcpy(base, ".");
 	int result = findInDir(baseDir, searchTerm, contains, base);
-	if (closedir(baseDir) < 0) {
-		perror("Error al cerrar el directorio");
-		return ++result;
-	}
+	
 	return result;
 }
 
@@ -98,13 +95,17 @@ findInDir(DIR *dir, char *searchTerm, Contains contains, char dirName[MAX_STR_SI
 				                     searchTerm,
 				                     contains,
 				                     complete);
-				close(result);
 			}
 		}
 	}
 
 	if (errno != 0) {
 		perror("Error al leer un archivo del del directorio");
+		errAmnt++;
+	}
+
+	if (closedir(dir) < 0) {
+		perror("Error al cerrar el directorio");
 		errAmnt++;
 	}
 
