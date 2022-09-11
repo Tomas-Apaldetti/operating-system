@@ -64,7 +64,6 @@ find(char *searchTerm, Contains contains)
 	char base[MAX_STR_SIZE];
 	strcpy(base, ".");
 	int result = findInDir(baseDir, searchTerm, contains, base);
-	
 	return result;
 }
 
