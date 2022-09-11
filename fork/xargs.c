@@ -62,7 +62,6 @@ callProg(char *args[ARGS_SIZE])
 
 	int err = 0;
 
-
 	if (fRes == 0) {
 		int execRes = execvp(args[0], args);
 		if (execRes == -1) {
