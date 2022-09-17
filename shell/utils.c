@@ -63,3 +63,19 @@ fprintf_debug(FILE *file, char *format, ...)
 	return 0;
 #endif
 }
+
+int
+perror_debug(char *format, ...)
+{
+#ifndef SHELL_NO_INTERACTIVE
+	va_list args;
+	va_start(args, format);
+	fprintf(stderr, "lab-shell: ");
+	int ret = vfprintf(stderr, format, args);
+	fprintf(stderr, "%s\n", strerror(errno));
+	va_end(args);
+	return ret;
+#else
+	return 0;
+#endif
+}

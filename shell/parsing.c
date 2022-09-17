@@ -1,5 +1,9 @@
 #include "parsing.h"
 
+#define ENV_START '$'
+#define ENV_DEFAULT ""
+#define ENV_MAGIC_LAST_STATE '?'
+
 // parses an argument of the command stream input
 static char *
 get_token(char *buf, int idx)
@@ -101,7 +105,31 @@ parse_environ_var(struct execcmd *c, char *arg)
 static char *
 expand_environ_var(char *arg)
 {
-	// Your code here
+	if (!arg || arg[0] != ENV_START)
+		return arg;
+
+	if (arg[1] == ENV_MAGIC_LAST_STATE) {
+		extern int status;
+		sprintf(arg, "%d", status);
+		return arg;
+	}
+
+	char *env_value = getenv(arg + 1);
+
+	if (!env_value) {
+		strcpy(arg, "");
+		return arg;
+	}
+
+	int val_len;
+	if ((val_len = strlen(env_value)) > ARGSIZE) {
+		arg = realloc(arg, val_len * sizeof(char));
+		if (!arg) {
+			perror_debug("Can't realloc\n");
+			return arg;
+		}
+		strcpy(arg, env_value);
+	}
 
 	return arg;
 }

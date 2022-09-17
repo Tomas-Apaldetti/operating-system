@@ -1,7 +1,24 @@
 #include "runcmd.h"
+#include <sys/types.h>
+#include <sys/wait.h>
+
+void oportunistic_wait(void);
 
 int status = 0;
 struct cmd *parsed_pipe;
+
+void
+oportunistic_wait()
+{
+	int finished;
+	int bg_status;
+	while ((finished = waitpid(-1, &bg_status, WNOHANG)) > 0) {
+		printf_debug("%s  [PID=%d] Finished%s\n",
+		             COLOR_BLUE,
+		             finished,
+		             COLOR_RESET);
+	}
+}
 
 // runs the command in 'cmd'
 int
@@ -52,9 +69,13 @@ run_cmd(char *cmd)
 	// 	'print_back_info()'
 	//
 	// Your code here
+	if (parsed->type == BACK) {
+		print_back_info(parsed);
+	} else {
+		waitpid(p, &status, 0);
+	}
 
-	// waits for the process to finish
-	waitpid(p, &status, 0);
+	oportunistic_wait();
 
 	print_status_info(parsed);
 
