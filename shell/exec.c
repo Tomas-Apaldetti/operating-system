@@ -63,18 +63,20 @@ set_environ_vars(char **eargv, int eargc)
 {
 	for(int i = 0; i < eargc; i++) {
 		int sep;
-		if ((sep = block_contains(eargv[i], '=')) != -1) {
-			char key[ARGSIZE], value[ARGSIZE];
-			get_environ_key(eargv[i], key);
-			get_environ_value(eargv[i], value, sep);
+		if ((sep = block_contains(eargv[i], '=')) == -1)
+			continue; 
+		
+		char key[ARGSIZE], value[ARGSIZE];
+		get_environ_key(eargv[i], key);
+		get_environ_value(eargv[i], value, sep);
 
-			int env_result = setenv(key, value, OVERWRITE);
-			if (env_result == -1) {
-				perror_debug("Couldn't set environment "
-				             "variable %s\n",
-				             eargv);
-			}
+		int env_result = setenv(key, value, OVERWRITE);
+		if (env_result == -1) {
+			perror_debug("Couldn't set environment "
+							"variable %s\n",
+							eargv);
 		}
+		
 	}
 }
 
@@ -96,7 +98,7 @@ open_redir_fd(char *file, int flags)
 	}
 	mode_t mode = S_IRUSR | S_IRGRP | S_IROTH;
 	flags = flags | O_CLOEXEC;
-	if (flags && O_RDWR) {
+	if (flags & O_RDWR) {
 		flags = flags | O_CREAT | O_TRUNC;
 		mode = mode | S_IWUSR;
 	}
@@ -171,13 +173,13 @@ exec_cmd(struct cmd *cmd)
 		}
 
 		if (r->err_file && r->err_file[0] != END_STRING) {
-			int err_fd = open_redir_fd(r->err_file, O_RDWR);
-			do_redir(STDERR, err_fd);
-		}
 
-		if (r->err_file && r->out_file && r->err_file[0] != END_STRING &&
-		    strcmp(r->err_file, r->out_file) == 0) {
-			do_redir(STDERR, STDOUT);
+			if(strcmp(r->err_file, "&1") == 0 && r->out_file[0] != END_STRING){
+				do_redir(STDERR, STDOUT);
+			}else{
+				int err_fd = open_redir_fd(r->err_file, O_RDWR);
+				do_redir(STDERR, err_fd);
+			}
 		}
 
 		cmd->type = EXEC;

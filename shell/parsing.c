@@ -1,7 +1,6 @@
 #include "parsing.h"
 
 #define ENV_START '$'
-#define ENV_DEFAULT ""
 #define ENV_MAGIC_LAST_STATE '?'
 
 // parses an argument of the command stream input
@@ -116,8 +115,10 @@ expand_environ_var(char *arg)
 
 	char *env_value = getenv(arg + 1);
 
+	char *empty = "";
+
 	if (!env_value) {
-		strcpy(arg, "");
+		strcpy(arg, empty);
 		return arg;
 	}
 
@@ -128,8 +129,8 @@ expand_environ_var(char *arg)
 			perror_debug("Can't realloc\n");
 			return arg;
 		}
-		strcpy(arg, env_value);
 	}
+	strcpy(arg, env_value);
 
 	return arg;
 }
