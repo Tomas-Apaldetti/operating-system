@@ -163,7 +163,10 @@ parse_exec(char *buf_cmd)
 
 		tok = expand_environ_var(tok);
 
-		c->argv[argc++] = tok;
+		if (!*tok)
+			free(tok);
+		else
+			c->argv[argc++] = tok;
 	}
 
 	c->argv[argc] = (char *) NULL;

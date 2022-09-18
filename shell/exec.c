@@ -61,11 +61,11 @@ get_environ_value(char *arg, char *value, int idx)
 static void
 set_environ_vars(char **eargv, int eargc)
 {
-	for(int i = 0; i < eargc; i++) {
+	for (int i = 0; i < eargc; i++) {
 		int sep;
 		if ((sep = block_contains(eargv[i], '=')) == -1)
-			continue; 
-		
+			continue;
+
 		char key[ARGSIZE], value[ARGSIZE];
 		get_environ_key(eargv[i], key);
 		get_environ_value(eargv[i], value, sep);
@@ -73,10 +73,9 @@ set_environ_vars(char **eargv, int eargc)
 		int env_result = setenv(key, value, OVERWRITE);
 		if (env_result == -1) {
 			perror_debug("Couldn't set environment "
-							"variable %s\n",
-							eargv);
+			             "variable %s\n",
+			             eargv);
 		}
-		
 	}
 }
 
@@ -173,10 +172,10 @@ exec_cmd(struct cmd *cmd)
 		}
 
 		if (r->err_file && r->err_file[0] != END_STRING) {
-
-			if(strcmp(r->err_file, "&1") == 0 && r->out_file[0] != END_STRING){
+			if (strcmp(r->err_file, "&1") == 0 &&
+			    r->out_file[0] != END_STRING) {
 				do_redir(STDERR, STDOUT);
-			}else{
+			} else {
 				int err_fd = open_redir_fd(r->err_file, O_RDWR);
 				do_redir(STDERR, err_fd);
 			}
