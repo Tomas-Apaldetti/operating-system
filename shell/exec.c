@@ -148,6 +148,7 @@ exec_cmd(struct cmd *cmd)
 		int exec_result = execvp(e->argv[0], e->argv);
 		if (exec_result == -1) {
 			perror_debug("Can't execute\n");
+			free_command(cmd);
 			exit(-1);
 		}
 		break;
@@ -230,7 +231,7 @@ exec_cmd(struct cmd *cmd)
 
 				close_pipe(left_to_rigth);
 
-				exec_cmd(p->rightcmd);
+				run_cmd(p->rightcmd->scmd);
 			}
 		}
 
