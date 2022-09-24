@@ -231,7 +231,7 @@ exec_cmd(struct cmd *cmd)
 
 				close_pipe(left_to_rigth);
 
-				run_cmd(p->rightcmd->scmd);
+				exec_cmd(p->rightcmd);
 			}
 		}
 
