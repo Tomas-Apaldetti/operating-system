@@ -25,29 +25,62 @@
 // 	return 0;
 // }
 
-
-int
-main(void)
+void
+test_1()
 {
 	// Test
+	printfmt("malloc 1:\n");
+	char *var1 = malloc(32);
+	printfmt("malloc 2:\n");
+	char *var2 = malloc(32);
+	printfmt("malloc 3:\n");
+	char *var3 = malloc(32);
+
+	free(var2);
+	free(var1);
+
+	printfmt("malloc 4:\n");
+
+	char *var4 = malloc(64);
+
+	// strcpy(var1, "Test 1");
+	strcpy(var3, "Test 3");
+	strcpy(var4, "Test 4");
+
+	// printfmt("%s\n", var1);
+	printfmt("%s\n", var3);
+	printfmt("%s\n", var4);
+
+	// free(var1);
+
+	free(var3);
+	free(var4);
+}
+
+void
+test_2()
+{
 	char *var1 = malloc(32);
 	char *var2 = malloc(32);
 	char *var3 = malloc(32);
 
-	free(var2);
-	char *var4 = malloc(100);
+	char *var4 = malloc(20000);
 
-	strcpy(var1, "Test 1");
-	strcpy(var3, "Test 3");
-	strcpy(var4, "Test 4");
-
-	printfmt("%s\n", var1);
-	printfmt("%s\n", var3);
-	printfmt("%s\n", var4);
-
-	free(var1);
-	free(var3);
 	free(var4);
+
+	char *var5 = malloc(100);
+
+	free(var3);
+	free(var2);
+	free(var5);
+	free(var1);
+}
+
+int
+main(void)
+{
+	// test_1();
+	test_2();
 
 	return 0;
 }

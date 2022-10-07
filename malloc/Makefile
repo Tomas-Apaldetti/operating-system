@@ -1,4 +1,4 @@
-CFLAGS := -ggdb3 -O2 -Wall -Wextra -std=gnu11
+CFLAGS := -ggdb3 -O0 -Wall -Wextra -std=gnu11
 CFLAGS += -Wmissing-prototypes
 LIBFLAGS := -shared -fPIC $(CFLAGS)
 
