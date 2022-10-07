@@ -79,8 +79,9 @@ test_2()
 int
 main(void)
 {
+#ifdef _ALLOW_STATISTICS_
 	// test_1();
 	test_2();
-
+#endif
 	return 0;
 }

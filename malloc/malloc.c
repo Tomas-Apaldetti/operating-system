@@ -1,5 +1,7 @@
 #define _DEFAULT_SOURCE
 
+#define _ALLOW_STATISTICS_
+
 #include <assert.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -9,6 +11,15 @@
 
 #include "malloc.h"
 #include "printfmt.h"
+
+// TODO:
+// 		* Test (Agregar Estadisticas para hacer mas facil el test)
+// 		* Probar Realloc
+//		* Dejar de confiar en el usuario => Agregar magic number
+//		* Calloc
+// 		* Completar Readme
+//		* Usar MACROS
+//		* SETEAR ERRNO = ENOMEM
 
 #define MAGIC_32BIT 0xBE5A74CDU
 
@@ -38,8 +49,7 @@ typedef char *byte;
 typedef struct region {
 	bool free;
 	size_t size;
-	block_header_t *header,
-	struct region *next;
+	block_header_t *header, struct region *next;
 	struct region *prev;
 } region_header_t;
 
@@ -70,17 +80,17 @@ print_statistics(void)
 }
 
 
-region_header_t*
+region_header_t *
 loop_for_region(region_header_t *actual_region, asize_t size)
 {
 	while (actual_region) {
 		if ((actual_region->size >= size + sizeof(region_header_t)) &&
-			(actual_region->free)) {
+		    (actual_region->free)) {
 			return actual_region;
 		}
 		actual_region = actual_region->next;
 	}
-	
+
 	return NULL;
 }
 
@@ -90,49 +100,56 @@ find_region_first_fit(size_t size)
 {
 	block_header_t *actual_block = block_header_list;
 
-	for(;actual_block;actual_block->next){
-		if(actual_block -> min_region < size)
+	for (; actual_block; actual_block->next) {
+		if (actual_block->min_region < size)
 			continue;
 
-		region_header_t * to_return = NULL;
+		region_header_t *to_return = NULL;
 
-		if((to_return = loop_for_region(HEADER2REGION(actual_block), size)))
+		if ((to_return =
+		             loop_for_region(HEADER2REGION(actual_block), size)))
 			return to_return;
 	}
 
 	return NULL;
 }
 
-region_header_t*
-loop_for_best_region(region_header_t* best_region, region_header_t* start_region,size_t size)
+region_header_t *
+loop_for_best_region(region_header_t *best_region,
+                     region_header_t *start_region,
+                     size_t size)
 {
-	region_header_t* curr_best = best_region;
-	region_header_t* actual_region = start_region;
+	region_header_t *curr_best = best_region;
+	region_header_t *actual_region = start_region;
 
-	while(actual_region){
-		if(actual_region->size <= size){
-			if(best_region && actual_region-> size < best_region->size){
+	while (actual_region) {
+		if (actual_region->size <= size) {
+			if (best_region &&
+			    actual_region->size < best_region->size) {
 				curr_best = actual_region;
 			} else if (!best_region) {
 				curr_best = actual_region;
 			}
 		}
-		actual_region = actual_region -> next
+		actual_region = actual_region->next
 	}
 
 	return curr_best;
 }
 
-region_header_t*
-find_best_fit(size_t size){
+region_header_t *
+find_best_fit(size_t size)
+{
 	block_header_t *actual_block = block_header_list;
 	region_header_t *best_region = NULL;
 
-	for(;actual_block;actual_block->next){
-		if(actual_block -> min_region < size)
+	for (; actual_block; actual_block->next) {
+		if (actual_block->min_region < size)
 			continue;
 
-		best_region = loop_for_best_region(best_region,HEADER2REGION(actual_block), size);
+		best_region = loop_for_best_region(best_region,
+		                                   HEADER2REGION(actual_block),
+		                                   size);
 	}
 
 	return best_region;
@@ -262,7 +279,7 @@ new_block(size_t size)
 		return NULL;
 
 	append_block(new_block_header);
-	new_block_header->size = new_block_header -> min_region =  block_size;
+	new_block_header->size = new_block_header->min_region = block_size;
 
 	region_header_t *region_header = HEADER2REGION(new_block_header);
 	region_header->size = block_size - sizeof(region_header_t);
@@ -296,11 +313,11 @@ try_split_region(region_header_t *region, size_t required_size)
 	region_2->next = region_1->next;
 	region_2->prev = region_1;
 	region_2->size = region_1->size - required_size - sizeof(region_header_t);
-	region_2->header = region_1 -> header;
+	region_2->header = region_1->header;
 	region_2->free = true;
 
-	if(region_2 -> size < region_2 -> header -> min_region )
-		region_2 -> header -> min_region = region_2 -> size;
+	if (region_2->size < region_2->header->min_region)
+		region_2->header->min_region = region_2->size;
 
 	region_1->next = region_2;
 	region_1->size = required_size;
@@ -312,11 +329,12 @@ try_split_region(region_header_t *region, size_t required_size)
 // FREE
 
 int
-get_min_region(region_header_t *region){
+get_min_region(region_header_t *region)
+{
 	int min = INT_MAX;
 	region_header_t *curr = region;
-	while(curr){
-		if(curr->size < min){
+	while (curr) {
+		if (curr->size < min) {
 			min = curr->size
 		}
 		curr = curr->next;
@@ -328,9 +346,9 @@ region_header_t *
 coalesce_regions(region_header_t *region_static,
                  region_header_t *region_adjacent_right)
 {
-	int static_size = region_static -> size;
-	int adjacent_size = region_adjacent_right -> size;
-	int header_min_size = region_static -> header -> min_region;
+	int static_size = region_static->size;
+	int adjacent_size = region_adjacent_right->size;
+	int header_min_size = region_static->header->min_region;
 
 	region_static->next = region_adjacent_right->next;
 	if (region_adjacent_right->next)
@@ -339,9 +357,10 @@ coalesce_regions(region_header_t *region_static,
 	region_static->size +=
 	        region_adjacent_right->size + sizeof(region_header_t);
 
-	if(static_size == header_min_size || adjacent_size == header_min_size)
-		region_static -> header -> min_region = get_min_region(HEADER2REGION(region_static -> header));
-		
+	if (static_size == header_min_size || adjacent_size == header_min_size)
+		region_static->header->min_region =
+		        get_min_region(HEADER2REGION(region_static->header));
+
 	return region_static;
 }
 
@@ -378,7 +397,7 @@ return_to_OS(region_header_t *region)
 void *
 malloc(size_t size)
 {
-	if(size > BLOCK_LG)
+	if (size > BLOCK_LG)
 		return NULL;
 
 	region_header_t *block;
@@ -415,7 +434,6 @@ malloc(size_t size)
 void
 free(void *ptr)
 {
-	// updates statistics
 	amount_of_frees++;
 
 	region_header_t *region_to_free = PTR2REGION(ptr);
@@ -439,38 +457,43 @@ calloc(size_t nmemb, size_t size)
 }
 
 bool
-can_use_region(region_header_t *region, region_header_t *region_adjacent){
-	if(!region_adjacent)
+can_use_region(region_header_t *region, region_header_t *region_adjacent)
+{
+	if (!region_adjacent)
 		return false;
-	if(!region_adjacent -> free)
+	if (!region_adjacent->free)
 		return false;
 	return true;
 }
 
-int 
-sum_of_regions(region_header_t *region_one, region_header_t * region_two, region_header_t * region_three){
+int
+sum_of_regions(region_header_t *region_one,
+               region_header_t *region_two,
+               region_header_t *region_three)
+{
 	int sum = region_one->size;
-	if(region_two)
+	if (region_two)
 		sum += region_two->size + sizeof(region_header_t);
-	if(region_three)
+	if (region_three)
 		sum += region_three->size + sizeof(region_header_t);
 	return sum;
 }
 
 void
-move_data(void* _dest, void* _src, int n){
-	char* dest = (char*) _dest;
-	char* src = (char*) _src;
+move_data(void *_dest, void *_src, int n)
+{
+	char *dest = (char *) _dest;
+	char *src = (char *) _src;
 
-	for(int i = 0; i < n; i++){
-		dest[i]= src[i];
+	for (int i = 0; i < n; i++) {
+		dest[i] = src[i];
 	}
 }
 
 void *
 realloc(void *ptr, size_t size)
 {
-	if(size > BLOCK_LG)
+	if (size > BLOCK_LG)
 		return NULL;
 
 	size_t new_size = size;
@@ -481,38 +504,37 @@ realloc(void *ptr, size_t size)
 		new_size = MIN_REGION_LEN;
 	}
 
-	if(!ptr)
+	if (!ptr)
 		return malloc(new_size);
 
 	region_header_t *region = PTR2REGION(ptr);
-	if(region -> size == new_size)
+	if (region->size == new_size)
 		return region;
 
-	if(region -> size > new_size){
+	if (region->size > new_size) {
 		try_split_region(region, new_size);
-		if(regions -> next){
+		if (regions->next) {
 			_ = try_coalesce_regions(regions->next);
 		}
 		return region;
 	}
-	
-	if(can_use_region(region, region->next) && sum_of_regions(region, region->next, NULL) >= new_size)
-	{
-		region = coalesce_regions(region, region -> next);
+
+	if (can_use_region(region, region->next) &&
+	    sum_of_regions(region, region->next, NULL) >= new_size) {
+		region = coalesce_regions(region, region->next);
 		try_split_region(region);
 		return region;
-	}
-	else if(can_use_region(region, region->prev) && sum_of_regions(region, region->prev, NULL) >= new_size)
-	{	
+	} else if (can_use_region(region, region->prev) &&
+	           sum_of_regions(region, region->prev, NULL) >= new_size) {
 		void *data = REGION2PTR(ptr);
 		int size_of_data = region->size;
 		region = coalesce_regions(region->prev, region);
 		try_split_region(region);
 		move_data(REGION2PTR(region), data, size_of_data);
 		return region;
-	}
-	else if(can_use_region(region, region->prev) && can_use_region(region, region->next) && sum_of_regions(region, region->prev, region->next) >= new_size)
-	{
+	} else if (can_use_region(region, region->prev) &&
+	           can_use_region(region, region->next) &&
+	           sum_of_regions(region, region->prev, region->next) >= new_size) {
 		void *data = REGION2PTR(ptr);
 		int size_of_data = region->size;
 		region = try_coalesce_regions(region);
@@ -522,8 +544,8 @@ realloc(void *ptr, size_t size)
 	} else {
 		void *data = REGION2PTR(ptr);
 		int size_of_data = region->size;
-		void* new_region = malloc(new_size);
-		if(!new_region)
+		void *new_region = malloc(new_size);
+		if (!new_region)
 			return NULL;
 		move_data(new_region, data, size_of_data);
 		free(ptr);
@@ -534,4 +556,4 @@ realloc(void *ptr, size_t size)
 }
 
 
-//TODO: SET ENOMEM
+// TODO: SET ENOMEM
