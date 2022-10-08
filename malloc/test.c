@@ -36,12 +36,11 @@ test_1()
 	printfmt("malloc 3:\n");
 	char *var3 = malloc(32);
 
-	free(var2);
 	free(var1);
+	free(var2);
 
 	printfmt("malloc 4:\n");
-
-	char *var4 = malloc(64);
+	char *var4 = malloc(64 + 64 + 64);
 
 	// strcpy(var1, "Test 1");
 	strcpy(var3, "Test 3");
@@ -54,34 +53,36 @@ test_1()
 	// free(var1);
 
 	free(var3);
+	free(var3);
 	free(var4);
 }
 
 void
 test_2()
 {
+	printfmt("malloc 1:\n");
 	char *var1 = malloc(32);
-	char *var2 = malloc(32);
+	printfmt("malloc 2:\n");
+	char *var2 = malloc(16241);
+	printfmt("malloc 3:\n");
 	char *var3 = malloc(32);
-
-	char *var4 = malloc(20000);
+	printfmt("malloc 4:\n");
+	char *var4 = malloc(32);
 
 	free(var4);
-
-	char *var5 = malloc(100);
-
 	free(var3);
 	free(var2);
-	free(var5);
 	free(var1);
+
+	// printfmt("malloc 5:\n");
+	// char *var5 = malloc(32);
+	// free(var5);
 }
 
 int
 main(void)
 {
-#ifdef _ALLOW_STATISTICS_
 	// test_1();
 	test_2();
-#endif
 	return 0;
 }
