@@ -15,7 +15,8 @@
 // TODO:
 // 		* Test (Agregar Estadisticas para hacer mas facil el test)
 // 		* Probar Realloc
-//		* Dejar de confiar en el usuario => Agregar magic number
+//		* Dejar de confiar en el usuario => Agregar magic number (listo)
+//		* Probar el best fit (listo)
 //		* Calloc
 // 		* Completar Readme
 //		* Usar MACROS
@@ -47,7 +48,6 @@ typedef char *byte;
 
 typedef struct block_header {
 	int size;
-	// int min_free_region_size;
 	struct block_header *next;
 	struct block_header *prev;
 } block_header_t;
@@ -78,12 +78,12 @@ print_statistics(void)
 }
 
 region_header_t *
-loop_for_first_fit_region(region_header_t *region, size_t size)
+loop_for_first_fit_region(region_header_t *start_region, size_t size)
 {
-	while (region) {
-		if ((region->size >= size) && (region->free))
-			return region;
-		region = region->next;
+	for (region_header_t *curr_region = start_region; curr_region;
+	     curr_region = curr_region->next) {
+		if ((start_region->size >= size) && (start_region->free))
+			return start_region;
 	}
 
 	return NULL;
@@ -108,41 +108,35 @@ find_region_first_fit(size_t size)
 }
 
 region_header_t *
-loop_for_best_fit_region(region_header_t *best_region,
-                         region_header_t *start_region,
-                         size_t size)
+loop_for_best_fit_region(region_header_t *start_region,
+                         size_t size,
+                         region_header_t *curr_best_region)
 {
-	region_header_t *curr_best = best_region;
-	region_header_t *curr_region_header = start_region;
+	for (region_header_t *curr_region = start_region; curr_region;
+	     curr_region = curr_region->next) {
+		if ((!curr_region->free) || (curr_region->size < size))
+			continue;
 
-	while (curr_region_header) {
-		if (curr_region_header->size <= size) {
-			if (best_region &&
-			    curr_region_header->size < best_region->size) {
-				curr_best = curr_region_header;
-			} else if (!best_region) {
-				curr_best = curr_region_header;
-			}
-		}
-		curr_region_header = curr_region_header->next;
+		if ((!curr_best_region) ||
+		    (curr_best_region->size > curr_region->size))
+			curr_best_region = curr_region;
 	}
 
-	return curr_best;
+	return curr_best_region;
 }
 
 region_header_t *
 find_region_best_fit(size_t size)
 {
-	region_header_t *best_region;
+	region_header_t *curr_best_region = NULL;
 
-	for (block_header_t *curr_block_header = block_header_list;
-	     curr_block_header;
-	     curr_block_header = curr_block_header->next) {
-		best_region = loop_for_best_fit_region(
-		        best_region, BLOCK2REGION(curr_block_header), size);
+	for (block_header_t *curr_block = block_header_list; curr_block;
+	     curr_block = curr_block->next) {
+		curr_best_region = loop_for_best_fit_region(
+		        BLOCK2REGION(curr_block), size, curr_best_region);
 	}
 
-	return NULL;
+	return curr_best_region;
 }
 
 // finds the next free region
@@ -363,14 +357,21 @@ return_block_to_OS(block_header_t *block_header)
 {
 	if (block_header->prev)
 		block_header->prev->next = block_header->next;
+	else
+		block_header_list = block_header->next;
+
+
 	if (block_header->next)
 		block_header->next->prev = block_header->prev;
+	else
+		block_header_tail = block_header->prev;
+
 
 	int result = munmap(block_header,
 	                    block_header->size + sizeof(block_header_t));
 
 	if (result == -1)
-		printfmt("Error");  // cambiar
+		printfmt("Error");  // change print
 }
 // ============================================
 
@@ -379,12 +380,11 @@ malloc(size_t size)
 {
 	region_header_t *region;
 
-	if ((size == 0) || (size > BLOCK_LG))
+	if ((size == 0) || (size + sizeof(region_header_t) > BLOCK_LG))
 		return NULL;
 
 	// aligns to multiple of 4 bytes
 	size = ALIGN4(size);
-
 	if (size < MIN_REGION_LEN)
 		size = MIN_REGION_LEN;
 
@@ -395,7 +395,6 @@ malloc(size_t size)
 
 	region = find_free_region(size);
 	if (!region) {
-		printfmt("No hay region libre, busco un bloque ...\n");
 		region = new_region(size);
 		if (!region)
 			return NULL;
@@ -416,33 +415,63 @@ are_all_block_free(region_header_t *region)
 	return (!region->prev && !region->next && region->free);
 }
 
-int
-check_region(region_header_t *region)
+bool
+is_ptr_into_blocks(byte ptr)
 {
-	if (region->free)
-		return EXIT_ERROR;
+	block_header_t *curr_block_header = block_header_list;
+	byte first_dir;
+	byte last_dir;
 
-	if (region->check_num != MAGIC_32BIT)
-		return EXIT_ERROR;
+	if (!curr_block_header)
+		return false;
 
-	return EXIT_OK;
+	while (curr_block_header) {
+		first_dir = (byte) REGION2PTR(BLOCK2REGION(curr_block_header));
+		last_dir = first_dir + curr_block_header->size -
+		           sizeof(region_header_t);
+
+		if ((first_dir <= ptr) && (ptr <= last_dir))
+			return true;
+
+		curr_block_header = curr_block_header->next;
+	}
+
+	return false;
+}
+
+bool
+is_valid_ptr(byte ptr)
+{
+	region_header_t *region;
+
+	// ptr check
+	if ((!ptr) || (!is_ptr_into_blocks(ptr)))
+		return false;
+
+	// region check
+	region = PTR2REGION(ptr);
+	if ((region->free) || (region->check_num != MAGIC_32BIT))
+		return false;
+
+	return true;
 }
 
 void
 free(void *ptr)
 {
-	// updates statistics
-	amount_of_frees++;
+	region_header_t *region_to_free;
 
-	region_header_t *region_to_free = PTR2REGION(ptr);
-	if (check_region(region_to_free) == EXIT_ERROR)
+	if (!is_valid_ptr((byte) ptr))  // print error
 		return;
 
-	// ver qué pasa con punteros invalidos
 
+	region_to_free = PTR2REGION(ptr);
 	region_to_free->free = true;
 
 	region_to_free = try_coalesce_regions(region_to_free);
+
+	// updates statistics
+	amount_of_frees++;
 
 	if (are_all_block_free(region_to_free))
 		return_block_to_OS(region_to_free->block_header);
@@ -493,58 +522,68 @@ move_data(void *_dest, void *_src, int n)
 void *
 realloc(void *ptr, size_t size)
 {
-	// 	if (size > BLOCK_LG)
+	region_header_t *region;
+
+	if (!ptr)
+		return malloc(size);
+
+	if (size + sizeof(region_header_t) > BLOCK_LG)
+		return NULL;
+
+	size = ALIGN4(size);
+	if (size < MIN_REGION_LEN) {
+		size = MIN_REGION_LEN;
+	}
+
+	if (!is_valid_ptr((byte) ptr))
+		return NULL;
+
+	region = PTR2REGION(ptr);
+	if (region->size == size)
+		return region;
+
+	if (region->size > size) {
+		try_split_region(region, size);
+		if (region->next) {
+			try_coalesce_regions(region->next);
+		}
+		return region;
+	}
+
+	// if (can_use_region(region, region->next) &&
+	//     sum_of_regions(region, region->next, NULL) >= size) {
+	// 	region = coalesce_regions(region, region->next);
+	// 	try_split_region(region);
+	// 	return region;
+	// } else if (can_use_region(region, region->prev) &&
+	//            sum_of_regions(region, region->prev, NULL) >= size) {
+	// 	void *data = REGION2PTR(ptr);
+	// 	int size_of_data = region->size;
+	// 	region = coalesce_regions(region->prev, region);
+	// 	try_split_region(region);
+	// 	move_data(REGION2PTR(region), data, size_of_data);
+	// 	return region;
+	// } else if (can_use_region(region, region->prev) &&
+	//            can_use_region(region, region->next) &&
+	//            sum_of_regions(region, region->prev, region->next) >= size) {
+	// 	void *data = REGION2PTR(ptr);
+	// 	int size_of_data = region->size;
+	// 	region = try_coalesce_regions(region);
+	// 	try_split_region(region);
+	// 	move_data(REGION2PTR(region), data, size_of_data);
+	// 	return region;
+	// } else {
+	// 	void *data = REGION2PTR(ptr);
+	// 	int size_of_data = region->size;
+	// 	void *new_region = malloc(size);
+	// 	if (!new_region)
 	// 		return NULL;
+	// 	move_data(new_region, data, size_of_data);
+	// 	free(ptr);
+	// 	return new_region;
+	// }
 
-	// 	size_t new_size = size;
-
-	// 	new_size = ALIGN4(size);
-
-	// 	if (new_size < MIN_REGION_LEN) {
-	// 		new_size = MIN_REGION_LEN;
-	// 	}
-
-	// 	if (!ptr)
-	// 		return malloc(new_size);
-
-	// 	region_header_t *region = PTR2REGION(ptr);
-	// 	if (region->size == new_size)
-	// 		return region;
-
-	// 	if (region->size > new_size) {
-	// 		try_split_region(region, new_size);
-	// 		if (region->next) {
-	// 			try_coalesce_regions(region->next);
-	// 		}
-	// 		return region;
-	// 	}
-
-	// 	if (can_use_region(region, region->next) &&
-	// 	    sum_of_regions(region, region->next, NULL) >= new_size) {
-	// 		region = coalesce_regions(region, region->next);
-	// 		try_split_region(region);
-	// 		return region;
-	// 	} else if (can_use_region(region, region->prev) &&
-	// 	           sum_of_regions(region, region->prev, NULL) >=
-	// new_size) { 		void *data = REGION2PTR(ptr); 		int
-	// size_of_data = region->size; 		region =
-	// coalesce_regions(region->prev, region);
-	// try_split_region(region); 		move_data(REGION2PTR(region), data,
-	// size_of_data); 		return region; 	} else if
-	// (can_use_region(region, region->prev) && can_use_region(region,
-	// region->next) && 	           sum_of_regions(region, region->prev,
-	// region->next) >= new_size) { 		void *data = REGION2PTR(ptr);
-	// int size_of_data = region->size; region =
-	// try_coalesce_regions(region); try_split_region(region);
-	// move_data(REGION2PTR(region), data, size_of_data); 		return region;
-	// } else { void *data = REGION2PTR(ptr); 		int size_of_data
-	// = region->size; void *new_region = malloc(new_size); if
-	// (!new_region) 			return NULL;
-	// move_data(new_region, data, size_of_data); 		free(ptr);
-	// return new_region;
-	// 	}
-
-	// 	return NULL;
+	return NULL;
 }
 
 
