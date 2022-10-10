@@ -35,3 +35,20 @@ printfmt(char* format, ...)
 
 	return r;
 }
+
+int
+perrorfmt(char* format, ...)
+{
+	int r;
+	va_list ap;
+
+	memset(buf, 0, MAX_SIZE);
+
+	va_start(ap, format);
+	vsnprintf(buf, MAX_SIZE, format, ap);
+	va_end(ap);
+
+	r = write(STDERR_FILENO, buf, MAX_SIZE);
+
+	return r;
+}
