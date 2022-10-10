@@ -1,5 +1,5 @@
 CFLAGS := -ggdb3 -O0 -Wall -Wextra -std=gnu11
-CFLAGS += -Wmissing-prototypes
+CFLAGS += -Wmissing-prototypes -D USE_STATS
 LIBFLAGS := -shared -fPIC $(CFLAGS)
 
 # To compile using different strategies:

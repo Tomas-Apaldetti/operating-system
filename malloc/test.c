@@ -8,6 +8,19 @@
 #define HELLO "hello from test"
 #define TEST_STRING "FISOP malloc is working!"
 
+#ifdef USE_STATS
+#include "statistics.h"
+stats_t stats;
+#define CLEAN_STATS reset_stats();
+#define RUN_TEST(test) {			\
+	printfmt("Hello from stats"); 	\
+	test();						\
+}
+#else
+#define CLEAN_STATS
+#define SETUP_TEST(test) (printfmt("Can't run test without statistics defined");)
+#endif
+
 // IMPLEMENTACION CATEDRA
 //  int
 //  main(void)
@@ -32,6 +45,7 @@ test_0()
 	char *var1 = malloc(1024 * 1024 * 32 - 44);
 
 	free(var1);
+	printfmt("amount of mallocs: %d \n", stats.malloc_calls);
 }
 
 void
@@ -173,7 +187,7 @@ test_5()
 int
 main(void)
 {
-	test_0();
+	RUN_TEST(test_0);
 	//  test_1();
 	//   test_2();
 	//   test_3();
