@@ -24,7 +24,6 @@ stats_t stats;
 #endif
 
 
-
 // TODO:
 // 		* Test (Agregar Estadisticas para hacer mas facil el test)
 // 		* Probar Realloc
@@ -398,13 +397,13 @@ coalesce_region_with_its_next(region_header_t *region)
 region_header_t *
 try_coalesce_regions(region_header_t *region)
 {
-	if (region->next && region->next->free){
+	if (region->next && region->next->free) {
 		INCREASE_STATS(coalesced_amnt, 1);
 		DECREASE_STATS(curr_regions, 1);
 		region = coalesce_region_with_its_next(region);
 	}
 
-	if (region->prev && region->prev->free){
+	if (region->prev && region->prev->free) {
 		INCREASE_STATS(coalesced_amnt, 1);
 		DECREASE_STATS(curr_regions, 1);
 		region = coalesce_region_with_its_next(region->prev);
@@ -545,9 +544,8 @@ free(void *ptr)
 	region_to_free = PTR2REGION(ptr);
 	region_to_free->free = true;
 
-	INCREASE_STATS(free_calls,1);
-	INCREASE_STATS(freed_amnt,
-					region_to_free->size);
+	INCREASE_STATS(free_calls, 1);
+	INCREASE_STATS(freed_amnt, region_to_free->size);
 
 	region_to_free = try_coalesce_regions(region_to_free);
 

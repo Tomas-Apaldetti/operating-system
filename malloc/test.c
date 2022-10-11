@@ -12,13 +12,15 @@
 #include "statistics.h"
 stats_t stats;
 #define CLEAN_STATS reset_stats();
-#define RUN_TEST(test) {			\
-	printfmt("Hello from stats"); 	\
-	test();						\
-}
+#define RUN_TEST(test)                                                         \
+	{                                                                      \
+		printfmt("Hello from stats");                                  \
+		test();                                                        \
+	}
 #else
 #define CLEAN_STATS
-#define SETUP_TEST(test) (printfmt("Can't run test without statistics defined");)
+#define SETUP_TEST(test)                                                       \
+	(printfmt("Can't run test without statistics defined");)
 #endif
 
 // IMPLEMENTACION CATEDRA
