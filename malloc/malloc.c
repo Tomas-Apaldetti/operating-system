@@ -23,20 +23,6 @@ stats_t stats;
 #define DECREASE_STATS(stat_name, amnt)
 #endif
 
-
-// TODO:
-// 		* Test (Agregar Estadisticas para hacer mas facil el test)
-// 		* Probar Realloc
-//		* Dejar de confiar en el usuario => Agregar magic number (listo)
-//		* Probar el best fit (listo)
-//		* Calloc (listo)
-// 		* Completar Readme
-//		* Usar MACROS (listo)
-//		* SETEAR ERRNO = ENOMEM (listo)
-//		* Agarrar malloc , calloc , realloc y free de la libreria std y
-//		ver qué devuelve en cada cosa para imprimir y reportar los mismos errores
-//		* Parece que las funciones hacen unos exit con unos numeros que estaría bueno replicar
-
 #define MAGIC_32BIT 0xBE5A74CDU
 
 #define ALIGN4(s) (((((s) -1) >> 2) << 2) + 4)
@@ -74,23 +60,11 @@ typedef struct region_header {
 	struct region_header *prev;
 	size_t size;
 	bool free;
-	int check_num;
+	unsigned int check_num;
 } region_header_t;
 
 block_header_t *block_header_list = NULL;
 block_header_t *block_header_tail = NULL;
-
-int amount_of_mallocs = 0;
-int amount_of_frees = 0;
-int requested_memory = 0;
-
-static void
-print_statistics(void)
-{
-	printfmt("mallocs:   %d\n", amount_of_mallocs);
-	printfmt("frees:     %d\n", amount_of_frees);
-	printfmt("requested: %d\n", requested_memory);
-}
 
 region_header_t *
 loop_for_first_fit_region(region_header_t *start_region, size_t size)
@@ -273,9 +247,8 @@ block_header_t *
 new_block(size_t size)
 {
 	block_header_t *new_block_header;
-	size_t new_block_size;
 
-	new_block_size = get_block_size(size);
+	int new_block_size = get_block_size(size);
 	if (new_block_size == EXIT_ERROR)
 		return NULL;
 
@@ -357,7 +330,7 @@ split_region(region_header_t *region, size_t size)
 void
 try_split_region(region_header_t *region, size_t size)
 {
-	int required_size_to_split;
+	size_t required_size_to_split;
 
 	required_size_to_split = size + sizeof(region_header_t) + MIN_REGION_LEN;
 	if (region->size < required_size_to_split)
@@ -437,41 +410,6 @@ return_block_to_OS(block_header_t *block_header)
 
 // ============================================
 
-void *
-malloc(size_t size)
-{
-	region_header_t *region;
-
-	if ((size == 0) || (ALIGN4(size) + sizeof(region_header_t) > BLOCK_LG))
-		return NULL;
-
-	INCREASE_STATS(requested_amnt, size);
-
-	// aligns to multiple of 4 bytes
-	size = ALIGN4(size);
-	if (size < MIN_REGION_LEN)
-		size = MIN_REGION_LEN;
-
-	INCREASE_STATS(malloc_calls, 1);
-	INCREASE_STATS(given_amnt, size);
-
-	region = find_free_region(size);
-	if (!region) {
-		region = new_region(size);
-		if (!region)
-			return NULL;
-	}
-
-	region->free = false;
-	try_split_region(region, size);
-
-	// lo hice para ir viendo cómo va todo
-	print_blocks();
-
-	return REGION2PTR(region);
-}
-
-
 /// @brief Responde si el BLOQUE en el que esta contenido una REGION esta completamente libre
 /// @param region REGION a preguntar
 /// @return
@@ -509,48 +447,28 @@ is_ptr_into_blocks(byte ptr)
 /// @brief Responde si un puntero es valido para ser tratado como REGION
 /// @param ptr
 /// @return
-bool
+int
 is_valid_ptr(byte ptr)
 {
 	region_header_t *region;
 
 	// ptr check
-	if ((!ptr) || (!is_ptr_into_blocks(ptr)))
+	if (!is_ptr_into_blocks(ptr)){
+		perrorfmt("Invalid pointer\nAborted\n");
 		return false;
+	}
 
 	// region check
 	region = PTR2REGION(ptr);
-	if ((region->free) || (region->check_num != MAGIC_32BIT))
+	if (region->free){
+		perrorfmt("Double free detected\nAborted\n");
 		return false;
-
+	}	
+	if(region->check_num != MAGIC_32BIT){
+		perrorfmt("Invalid pointer\nAborted\n");
+		return false;
+	}
 	return true;
-}
-
-void
-free(void *ptr)
-{
-	if (!ptr)
-		return;
-
-	region_header_t *region_to_free;
-
-	if (!is_valid_ptr((byte) ptr)) {
-		perrorfmt("free(): Invalid pointer\n");
-		exit(INVALID_POINTER);
-		return;
-	}  // print error
-
-
-	region_to_free = PTR2REGION(ptr);
-	region_to_free->free = true;
-
-	INCREASE_STATS(free_calls, 1);
-	INCREASE_STATS(freed_amnt, region_to_free->size);
-
-	region_to_free = try_coalesce_regions(region_to_free);
-
-	if (are_all_block_free(region_to_free))
-		return_block_to_OS(region_to_free->block_header);
 }
 
 /// @brief Setea los N bytes de PTR al valor C
@@ -566,22 +484,6 @@ set_mem(void *ptr, unsigned char c, size_t n)
 		bptr[i] = c;
 }
 
-void *
-calloc(size_t nmemb, size_t size)
-{
-	// handle overflow
-	if ((size == 0) || (nmemb > __SIZE_MAX__ / size)) {
-		perrorfmt("\n");
-		return NULL;
-	}
-
-	void *ptr = malloc(size * nmemb);
-	if (!ptr)
-		return NULL;
-
-	set_mem(ptr, 0, PTR2REGION(ptr)->size);
-	return ptr;
-}
 
 /// @brief Mueve los primeros N bytes de src a dest
 /// @param _dest
@@ -645,12 +547,12 @@ is_free(region_header_t *region)
 /// @param region_two Puede ser NULL
 /// @param region_three Puede ser NULL
 /// @return Suma del tamaño de las regiones mas el tamaño de los headers.
-int
+size_t
 sum_of_regions(region_header_t *region_one,
                region_header_t *region_two,
                region_header_t *region_three)
 {
-	int sum = region_one->size;
+	size_t sum = region_one->size;
 	if (region_two)
 		sum += region_two->size + sizeof(region_header_t);
 	if (region_three)
@@ -726,13 +628,14 @@ reallocate_on_new_region(region_header_t *region, size_t size)
 void *
 handle_realloc_more_memory(region_header_t *region, size_t size)
 {
-	if (are_free_to_coalesce(region, size, region->next, NULL)) {
+	if (are_free_to_coalesce(region, size, region->next, NULL))
 		return reallocate_with_next_region(region, size);
-	} else if (are_free_to_coalesce(region, size, region->prev, NULL)) {
+
+	if (are_free_to_coalesce(region, size, region->prev, NULL))
 		return reallocate_with_prev_region(region, size);
-	} else if (are_free_to_coalesce(region, size, region->prev, region->next)) {
+
+	if (are_free_to_coalesce(region, size, region->prev, region->next))
 		return reallocate_with_next_and_prev_region(region, size);
-	}
 
 	return reallocate_on_new_region(region, size);
 }
@@ -743,10 +646,67 @@ handle_realloc(region_header_t *region, size_t size)
 {
 	if (region->size == size)
 		return REGION2PTR(region);
-	else if (region->size > size) {
+
+	if (region->size > size) {
 		return handle_realloc_less_memory(region, size);
-	} else
-		return handle_realloc_more_memory(region, size);
+
+	return handle_realloc_more_memory(region, size);
+}
+
+void *
+malloc(size_t size)
+{
+	region_header_t *region;
+
+	if (size == 0)
+		return NULL;
+
+	if (ALIGN4(size) + sizeof(region_header_t) > BLOCK_LG) {
+		errno = ENOMEM;
+		return NULL;
+	}
+
+	INCREASE_STATS(requested_amnt, size);
+
+	// aligns to multiple of 4 bytes
+	size = ALIGN4(size);
+	if (size < MIN_REGION_LEN)
+		size = MIN_REGION_LEN;
+
+	INCREASE_STATS(malloc_calls, 1);
+	INCREASE_STATS(given_amnt, size);
+
+	region = find_free_region(size);
+	if (!region) {
+		region = new_region(size);
+		if (!region)
+			return NULL;
+	}
+
+	region->free = false;
+	try_split_region(region, size);
+
+	// lo hice para ir viendo cómo va todo
+	print_blocks();
+
+	return REGION2PTR(region);
+}
+
+void *
+calloc(size_t nmemb, size_t size)
+{
+	// handle overflow
+	if ((size != 0) && (nmemb > __SIZE_MAX__ / size)) {
+		errno = ENOMEM;
+		return NULL;
+	}
+
+	void *ptr = malloc(size * nmemb);
+	if (!ptr)
+		return NULL;
+
+	set_mem(ptr, 0, PTR2REGION(ptr)->size);
+	return ptr;
 }
 
 void *
@@ -761,15 +721,16 @@ realloc(void *ptr, size_t size)
 	}
 
 	size = ALIGN4(size);
-	if (size + sizeof(region_header_t) > BLOCK_LG)
+	if (size + sizeof(region_header_t) > BLOCK_LG){
+		errno = ENOMEM;
 		return NULL;
+	}
 
 	if (size < MIN_REGION_LEN) {
 		size = MIN_REGION_LEN;
 	}
 
 	if (!is_valid_ptr((byte) ptr)) {
-		perrorfmt("realloc(): invalid pointer\n");
 		exit(INVALID_POINTER);
 	}
 
@@ -780,3 +741,28 @@ realloc(void *ptr, size_t size)
 
 	return aux;
 }
+
+void
+free(void *ptr)
+{
+	if (!ptr)
+		return;
+
+	region_header_t *region_to_free;
+
+	if (!is_valid_ptr((byte) ptr)) {
+		exit(INVALID_POINTER);
+	}
+
+	region_to_free = PTR2REGION(ptr);
+	region_to_free->free = true;
+
+	INCREASE_STATS(free_calls, 1);
+	INCREASE_STATS(freed_amnt, region_to_free->size);
+
+	region_to_free = try_coalesce_regions(region_to_free);
+
+	if (are_all_block_free(region_to_free))
+		return_block_to_OS(region_to_free->block_header);
+}
+
