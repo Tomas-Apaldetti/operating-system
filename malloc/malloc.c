@@ -6,6 +6,8 @@
 #include <unistd.h>
 #include <errno.h>
 
+#include <errno.h>
+
 #include <sys/mman.h>
 
 #include "malloc.h"
@@ -18,7 +20,7 @@ stats_t stats;
 #define DECREASE_STATS(stat_name, amnt) (stats.stat_name -= amnt)
 #else
 #define INCREASE_STATS(stat_name, amnt)
-#define DECREASE_STATS(stat_name, amnt) 
+#define DECREASE_STATS(stat_name, amnt)
 #endif
 
 
@@ -32,6 +34,9 @@ stats_t stats;
 // 		* Completar Readme
 //		* Usar MACROS (listo)
 //		* SETEAR ERRNO = ENOMEM (listo)
+//		* Agarrar malloc , calloc , realloc y free de la libreria std y
+//		ver qué devuelve en cada cosa para imprimir y reportar los mismos errores
+//		* Parece que las funciones hacen unos exit con unos numeros que estaría bueno replicar
 
 #define MAGIC_32BIT 0xBE5A74CDU
 
@@ -73,7 +78,6 @@ typedef struct region_header {
 	int check_num;
 } region_header_t;
 
-
 block_header_t *block_header_list = NULL;
 block_header_t *block_header_tail = NULL;
 
@@ -94,8 +98,8 @@ loop_for_first_fit_region(region_header_t *start_region, size_t size)
 {
 	for (region_header_t *curr_region = start_region; curr_region;
 	     curr_region = curr_region->next) {
-		if ((start_region->size >= size) && (start_region->free))
-			return start_region;
+		if ((curr_region->size >= size) && (curr_region->free))
+			return curr_region;
 	}
 	return NULL;
 }
@@ -227,8 +231,8 @@ print_blocks()
 // MALLOC
 
 
-/// @brief Agrega un nuevo BLOQUE a la lista de bloques de malloc, estando, o no, la lista vacia.  
-/// @param new_block BLOQUE a agregar a la lista 
+/// @brief Agrega un nuevo BLOQUE a la lista de bloques de malloc, estando, o no, la lista vacia.
+/// @param new_block BLOQUE a agregar a la lista
 void
 append_block(block_header_t *new_block)
 {
@@ -245,7 +249,8 @@ append_block(block_header_t *new_block)
 
 /// @brief Calcula el tamaño del BLOQUE necesario para albergar la REGION pedida
 /// @param size Tamaño de la REGION pedida
-/// @return Tamaño del BLOQUE si la region puede ser contenida dentro de las categorias. Devuelve -1 en caso de que no pueda ser contenida
+/// @return Tamaño del BLOQUE si la region puede ser contenida dentro de las
+/// categorias. Devuelve -1 en caso de que no pueda ser contenida
 int
 get_block_size(size_t size)
 {
@@ -259,9 +264,12 @@ get_block_size(size_t size)
 	return EXIT_ERROR;
 }
 
-/// @brief Pide un nuevo BLOQUE de memoria al S.O. dado un tamaño de REGION. Guarda el BLOQUE en la lista. 
+/// @brief Pide un nuevo BLOQUE de memoria al S.O. dado un tamaño de REGION.
+/// Guarda el BLOQUE en la lista.
 /// @param size Tamaño de la REGION
-/// @return Puntero al comienzo de bloque, incluyendo su header. Retorna NULL en caso de no poder albergar el tamaño pedido. Retorna NULL y setea errno = ENOMEM en caso del que pedido de memoria falle
+/// @return Puntero al comienzo de bloque, incluyendo su header. Retorna NULL en
+/// caso de no poder albergar el tamaño pedido. Retorna NULL y setea errno =
+/// ENOMEM en caso del que pedido de memoria falle
 block_header_t *
 new_block(size_t size)
 {
@@ -278,15 +286,11 @@ new_block(size_t size)
 	                        MAP_ANON | MAP_PRIVATE,
 	                        -1,
 	                        0);
-	if (new_block_header == MAP_FAILED){
+	if (new_block_header == MAP_FAILED) {
 		errno = ENOMEM;
 		return NULL;
 	}
 
-	INCREASE_STATS(mapped_amnt, new_block_size);
-	INCREASE_STATS(total_blocks, 1);
-	INCREASE_STATS(curr_blocks, 1);
-		
 	new_block_header->size = new_block_size;
 	append_block(new_block_header);
 
@@ -294,9 +298,12 @@ new_block(size_t size)
 }
 
 
-/// @brief Obtiene una nueva REGION pidiendo memoria al S.O. Guarda el BLOQUE que contiene la region en la lista. 
-/// @param size Tamaño de la REGION. 
-/// @return Puntero a la REGION, incluyendo su header. Retorna NULL en caso de no poder pedir el tamaño pedido. Retorna NULL y setea errno = ENOMEM en caso del que pedido de memoria falle.
+/// @brief Obtiene una nueva REGION pidiendo memoria al S.O. Guarda el BLOQUE
+/// que contiene la region en la lista.
+/// @param size Tamaño de la REGION.
+/// @return Puntero a la REGION, incluyendo su header. Retorna NULL en caso de
+/// no poder pedir el tamaño pedido. Retorna NULL y setea errno = ENOMEM en caso
+/// del que pedido de memoria falle.
 region_header_t *
 new_region(size_t size)
 {
@@ -319,7 +326,9 @@ new_region(size_t size)
 	return new_region_header;
 }
 
-/// @brief Divide una REGION de memoria en dos, suponiendo que ambas REGIONES puedan ser potencialmente usadas. Si la REGION es divivida, se actualizara el puntero de next para que apunte a la siguiente region.
+/// @brief Divide una REGION de memoria en dos, suponiendo que ambas REGIONES
+/// puedan ser potencialmente usadas. Si la REGION es divivida, se actualizara
+/// el puntero de next para que apunte a la siguiente region.
 /// @param region REGION a ser potencialmente dividida
 /// @param size Tamaño de la REGION que debe tener en caso de ser dividida.
 void
@@ -338,7 +347,6 @@ split_region(region_header_t *region, size_t size)
 	new_next_region->block_header = block_header;
 	new_next_region->free = true;
 	new_next_region->check_num = MAGIC_32BIT;
-
 
 	region->next = new_next_region;
 	region->size = size;
@@ -363,8 +371,7 @@ try_split_region(region_header_t *region, size_t size)
 
 // FREE
 
-
-/// @brief Junta dos REGIONES, manteniendo la mas "izquierda" como la sobreviviente. 
+/// @brief Junta dos REGIONES, manteniendo la mas "izquierda" como la sobreviviente.
 /// @param region REGION sobreviviente, se junta con la region next (es decir, la region a su "derecha").
 /// @return Devuelve la REGION sobreviviente con los punteros modificados
 region_header_t *
@@ -373,7 +380,7 @@ coalesce_region_with_its_next(region_header_t *region)
 	block_header_t *block_header = region->block_header;
 	region_header_t *next_region = region->next;
 
-	region->size += region->next->size + sizeof(region_header_t);
+	region->size += next_region->size + sizeof(region_header_t);
 	region->next = next_region->next;
 	if (next_region->next)
 		next_region->next->prev = region;
@@ -381,9 +388,13 @@ coalesce_region_with_its_next(region_header_t *region)
 	return region;
 }
 
-/// @brief Intenta juntar las regiones adyacentes a la REGION pasada. Se juntaran en caso de que alguna de las dos (o ambas) esten libres. Se intenta juntar las REGIONES de "derecha" a "izquierda".
-/// @param region Region la cual se chequeara si puede ser unida a sus regiones adyacentes.
-/// @return La REGION sobreviviente luego de intentar juntarlas. Puede ser la region pasada originalmente, o la region adyacente "izquierda".
+/// @brief Intenta juntar las regiones adyacentes a la REGION pasada. Se
+/// juntaran en caso de que alguna de las dos (o ambas) esten libres. Se intenta
+/// juntar las REGIONES de "derecha" a "izquierda".
+/// @param region Region la cual se chequeara si puede ser unida a sus regiones
+/// adyacentes.
+/// @return La REGION sobreviviente luego de intentar juntarlas. Puede ser la
+/// region pasada originalmente, o la region adyacente "izquierda".
 region_header_t *
 try_coalesce_regions(region_header_t *region)
 {
@@ -392,7 +403,7 @@ try_coalesce_regions(region_header_t *region)
 		DECREASE_STATS(curr_regions, 1);
 		region = coalesce_region_with_its_next(region);
 	}
-		
+
 	if (region->prev && region->prev->free){
 		INCREASE_STATS(coalesced_amnt, 1);
 		DECREASE_STATS(curr_regions, 1);
@@ -402,7 +413,8 @@ try_coalesce_regions(region_header_t *region)
 	return region;
 }
 
-/// @brief Devuelve un BLOQUE que se encuentra totalmente liberado al S.O. Actualiza la lista de bloques
+/// @brief Devuelve un BLOQUE que se encuentra totalmente liberado al S.O.
+/// Actualiza la lista de bloques
 /// @param block_header Puntero al BLOQUE a liberar
 void
 return_block_to_OS(block_header_t *block_header)
@@ -423,6 +435,7 @@ return_block_to_OS(block_header_t *block_header)
 
 	munmap(block_header, block_header->size + sizeof(block_header_t));
 }
+
 // ============================================
 
 void *
@@ -430,7 +443,7 @@ malloc(size_t size)
 {
 	region_header_t *region;
 
-	if ((size == 0) || (size + sizeof(region_header_t) > BLOCK_LG))
+	if ((size == 0) || (ALIGN4(size) + sizeof(region_header_t) > BLOCK_LG))
 		return NULL;
 
 	INCREASE_STATS(requested_amnt, size);
@@ -460,9 +473,9 @@ malloc(size_t size)
 }
 
 
-/// @brief Responde si el BLOQUE en el que esta contenido una REGION esta completamente libre	
+/// @brief Responde si el BLOQUE en el que esta contenido una REGION esta completamente libre
 /// @param region REGION a preguntar
-/// @return 
+/// @return
 bool
 are_all_block_free(region_header_t *region)
 {
@@ -496,7 +509,7 @@ is_ptr_into_blocks(byte ptr)
 
 /// @brief Responde si un puntero es valido para ser tratado como REGION
 /// @param ptr
-/// @return 
+/// @return
 bool
 is_valid_ptr(byte ptr)
 {
@@ -517,17 +530,17 @@ is_valid_ptr(byte ptr)
 void
 free(void *ptr)
 {
-	if(!ptr)
+	if (!ptr)
 		return;
 
 	region_header_t *region_to_free;
 
-	if (!is_valid_ptr((byte) ptr)){
+	if (!is_valid_ptr((byte) ptr)) {
 		perrorfmt("free(): Invalid pointer\n");
 		exit(INVALID_POINTER);
 		return;
 	}  // print error
-		
+
 
 	region_to_free = PTR2REGION(ptr);
 	region_to_free->free = true;
@@ -551,38 +564,82 @@ set_mem(void *ptr, unsigned char c, size_t n)
 {
 	byte bptr = (byte) ptr;
 
-	for(size_t i = 0; i < n; i++)
+	for (size_t i = 0; i < n; i++)
 		bptr[i] = c;
 }
 
 void *
 calloc(size_t nmemb, size_t size)
 {
-	size_t new_size = size * nmemb;
+	// handle overflow
+	if ((size == 0) || (nmemb > __SIZE_MAX__ / size)) {
+		perrorfmt("\n");
+		return NULL;
+	}
 
-	void *to_return = malloc(new_size);
-
-	if(!to_return)
+	void *ptr = malloc(size * nmemb);
+	if (!ptr)
 		return NULL;
 
-	region_header_t* to_return_header = PTR2REGION(to_return);
+	set_mem(ptr, 0, PTR2REGION(ptr)->size);
+	return ptr;
+}
 
-	set_mem(to_return, 0, to_return_header->size);
+/// @brief Mueve los primeros N bytes de src a dest
+/// @param _dest
+/// @param _src
+/// @param n
+void
+move_data(void *_dest, void *_src, int n)
+{
+	byte dest = (byte) _dest;
+	byte src = (byte) _src;
 
-	return to_return;
+	for (int i = 0; i < n; i++) {
+		dest[i] = src[i];
+	}
+}
+
+/// @brief Realiza un split de la región y a la nueva region libre le aplica un
+/// coalesce con la siguiente
+/// @param region Región a la cual se le realiza el split
+/// @param size Tamaño con el cual quedará la región luego de las operaciones
+void
+split_and_coalesce_next_regions(region_header_t *region, size_t size)
+{
+	region_header_t *new_next_region;
+	region_header_t *last_next_region = region->next;
+
+	new_next_region = SPLITREGION(region, size);
+	new_next_region->next = last_next_region->next;
+	new_next_region->prev = last_next_region->prev;
+	new_next_region->size = last_next_region->size + (region->size - size);
+	new_next_region->block_header = last_next_region->block_header;
+	new_next_region->free = true;
+	new_next_region->check_num = MAGIC_32BIT;
+
+	region->next = new_next_region;
+	region->size = size;
+}
+
+void *
+handle_realloc_less_memory(region_header_t *region, size_t size)
+{
+	if ((region->next) && (region->next->free))
+		split_and_coalesce_next_regions(region, size);
+	else
+		try_split_region(region, size);
+
+	return REGION2PTR(region);
 }
 
 /// @brief Responde si la region no es NULL y si esta libre
 /// @param region
-/// @return 
+/// @return
 bool
-can_use_region(region_header_t *region)
+is_free(region_header_t *region)
 {
-	if (!region)
-		return false;
-	if (!region->free)
-		return false;
-	return true;
+	return (region && region->free);
 }
 
 /// @brief Suma el tamaño de las potenciales tres regiones, teniendo en cuenta el tamaño del header
@@ -603,104 +660,125 @@ sum_of_regions(region_header_t *region_one,
 	return sum;
 }
 
-
-/// @brief Mueve los primeros N bytes de src a dest
-/// @param _dest 
-/// @param _src 
-/// @param n 
-void
-move_data(void *_dest, void *_src, int n)
+bool
+are_free_to_coalesce(region_header_t *region,
+                     size_t size,
+                     region_header_t *region_1,
+                     region_header_t *region_2)
 {
-	byte dest = (byte) _dest;
-	byte src = (byte) _src;
-
-	for (int i = 0; i < n; i++) {
-		dest[i] = src[i];
+	if (!region_2) {
+		return (is_free(region_1) &&
+		        sum_of_regions(region, region_1, NULL) >= size);
 	}
+
+	return (is_free(region_1) && (is_free(region_2)) &&
+	        sum_of_regions(region, region_1, region_2) >= size);
+}
+
+void *
+reallocate_with_next_region(region_header_t *region, size_t size)
+{
+	region = coalesce_region_with_its_next(region);
+
+	region->free = false;
+	try_split_region(region, size);
+	return REGION2PTR(region);
+}
+
+void *
+reallocate_with_prev_region(region_header_t *region, size_t size)
+{
+	region_header_t *last_region = region;
+
+	region = coalesce_region_with_its_next(region->prev);
+	move_data(REGION2PTR(region), REGION2PTR(last_region), last_region->size);
+
+	region->free = false;
+	try_split_region(region, size);
+	return REGION2PTR(region);
+}
+
+void *
+reallocate_with_next_and_prev_region(region_header_t *region, size_t size)
+{
+	region_header_t *last_region = region;
+
+	region = coalesce_region_with_its_next(region->prev);
+	region = coalesce_region_with_its_next(region);
+	move_data(REGION2PTR(region), REGION2PTR(last_region), last_region->size);
+
+	region->free = false;
+	try_split_region(region, size);
+	return REGION2PTR(region);
+}
+
+void *
+reallocate_on_new_region(region_header_t *region, size_t size)
+{
+	void *new_ptr = malloc(size);
+	if (!new_ptr)
+		return NULL;
+
+	move_data(new_ptr, REGION2PTR(region), region->size);
+	free(REGION2PTR(region));
+
+	return new_ptr;
+}
+
+void *
+handle_realloc_more_memory(region_header_t *region, size_t size)
+{
+	if (are_free_to_coalesce(region, size, region->next, NULL)) {
+		return reallocate_with_next_region(region, size);
+	} else if (are_free_to_coalesce(region, size, region->prev, NULL)) {
+		return reallocate_with_prev_region(region, size);
+	} else if (are_free_to_coalesce(region, size, region->prev, region->next)) {
+		return reallocate_with_next_and_prev_region(region, size);
+	}
+
+	return reallocate_on_new_region(region, size);
+}
+
+
+void *
+handle_realloc(region_header_t *region, size_t size)
+{
+	if (region->size == size)
+		return REGION2PTR(region);
+	else if (region->size > size) {
+		return handle_realloc_less_memory(region, size);
+	} else
+		return handle_realloc_more_memory(region, size);
 }
 
 void *
 realloc(void *ptr, size_t size)
 {
-	region_header_t *region;
-
 	if (!ptr)
 		return malloc(size);
 
+	if (size == 0) {
+		free(ptr);
+		return NULL;
+	}
+
+	size = ALIGN4(size);
 	if (size + sizeof(region_header_t) > BLOCK_LG)
 		return NULL;
 
-	size = ALIGN4(size);
 	if (size < MIN_REGION_LEN) {
 		size = MIN_REGION_LEN;
 	}
 
-	if (!is_valid_ptr((byte) ptr)){
-		perrorfmt("realloc(): Invalid pointer");
+	if (!is_valid_ptr((byte) ptr)) {
+		perrorfmt("realloc(): invalid pointer\n");
 		exit(INVALID_POINTER);
-		return NULL;
-	}
-		
-
-	region = PTR2REGION(ptr);
-	if (region->size == size)
-		return region;
-
-	if (region->size > size) {
-
-		INCREASE_STATS(realloc_optimized, 1);
-		INCREASE_STATS(freed_amnt, region->size - size);
-
-		try_split_region(region, size);
-		if (region->next) {
-			try_coalesce_regions(region->next);
-		}
-		
-		return region;
 	}
 
-	int old_size = region->size;
-	
+	void *aux = handle_realloc(PTR2REGION(ptr), size);
 
-	if (can_use_region(region->next) &&
-	    sum_of_regions(region, region->next, NULL) >= size) {
+	// lo hice para ir viendo cómo va todo
+	print_blocks();
 
-		INCREASE_STATS(requested_amnt, size - region->size);
-		INCREASE_STATS(realloc_optimized, 1);
-
-		region = coalesce_region_with_its_next(region);
-		try_split_region(region, size);
-		return region;
-	} else if (can_use_region(region->prev) &&
-	           sum_of_regions(region, region->prev, NULL) >= size) {
-
-		INCREASE_STATS(requested_amnt, size - region->size);
-		INCREASE_STATS(realloc_optimized, 1);
-
-		region = coalesce_region_with_its_next(region->prev);
-		try_split_region(region, size);
-		move_data(REGION2PTR(region), ptr, old_size);
-		region->free = false;
-		return region;
-	} else if (can_use_region(region->prev) &&
-	           can_use_region(region->next) &&
-	           sum_of_regions(region, region->prev, region->next) >= size) {
-
-		INCREASE_STATS(requested_amnt, size - region->size);
-		INCREASE_STATS(realloc_optimized, 1);
-
-		region = try_coalesce_regions(region);
-		try_split_region(region, size);
-		move_data(REGION2PTR(region), ptr, old_size);
-		region->free = false;
-		return region;
-	} else {
-		INCREASE_STATS(reallloc_no_optimized, 1);
-		void *new_region = malloc(size);
-		if (!new_region)
-			return NULL;
-		move_data(new_region, ptr, old_size);
-		free(ptr);
-		return new_region;
-	}
+	return aux;
 }

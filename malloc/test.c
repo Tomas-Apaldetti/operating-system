@@ -41,11 +41,34 @@ stats_t stats;
 void
 test_0()
 {
-	printfmt("malloc 1:\n");
-	char *var1 = malloc(1024 * 1024 * 32 - 44);
+	printfmt("realloc 1:\n");
+	char *var1 = realloc(NULL, 64);
+
+	printfmt("realloc 2:\n");
+	char *var2 = realloc(NULL, 64);
+
+	printfmt("realloc 3:\n");
+	char *var3 = realloc(NULL, 64);
+
+	printfmt("realloc 4:\n");
+	char *var4 = realloc(NULL, 64);
+
+	strcpy(var2, "Probando");
 
 	free(var1);
-	printfmt("amount of mallocs: %d \n", stats.malloc_calls);
+	free(var3);
+
+	printfmt("realloc test:\n");
+	char *var_test = realloc(var2, 180);
+
+	printfmt("Texto: %s\n", var_test);
+
+
+	free(var4);
+	free(var_test);
+
+	// free(var2);
+	// free(var1);
 }
 
 void
@@ -187,10 +210,10 @@ test_5()
 int
 main(void)
 {
-	RUN_TEST(test_0);
-	//  test_1();
-	//   test_2();
-	//   test_3();
+	test_0();
+	//   test_1();
+	//    test_2();
+	//    test_3();
 
 	// test_4();
 	// test_5();
