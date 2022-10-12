@@ -1,223 +1,239 @@
 #include <stdio.h>
+#include <stdbool.h>
 #include <string.h>
 #include <unistd.h>
 #include <stdlib.h>
 
 #include "printfmt.h"
 
-#define HELLO "hello from test"
-#define TEST_STRING "FISOP malloc is working!"
+#define KiB 1024
+#define MiB (1024 * KiB)
+
+#define ALIGN4(s) (((((s) -1) >> 2) << 2) + 4)
+
+#define BLOCK_SM (16 * KiB)
+#define BLOCK_MD (1 * MiB)
+#define BLOCK_LG (32 * MiB)
 
 #ifdef USE_STATS
 #include "statistics.h"
 stats_t stats;
-#define CLEAN_STATS reset_stats();
-#define RUN_TEST(test)                                                         \
-	{                                                                      \
-		printfmt("Hello from stats");                                  \
-		test();                                                        \
-	}
+#define CLEAN_STATS { 			\
+	YELLOW("LIMPIANDO STATS")	\
+	reset_stats();				\
+}
+
+#define RUN_TEST(test) test();
 #else
 #define CLEAN_STATS
-#define SETUP_TEST(test)                                                       \
-	(printfmt("Can't run test without statistics defined");)
+#define SETUP_TEST(test) printfmt("Can't run test without statistics defined");                                                       
 #endif
 
-// IMPLEMENTACION CATEDRA
-//  int
-//  main(void)
-//  {
-//  	printfmt("%s\n", HELLO);
+#define T_RED     "\x1b[31m"
+#define T_GREEN   "\x1b[32m"
+#define T_YELLOW  "\x1b[33m"
+#define RESET "\x1b[0m"
 
-// 	char *var = malloc(100);
-
-// 	strcpy(var, TEST_STRING);
-
-// 	printfmt("%s\n", var);
-
-// 	free(var);
-
-// 	return 0;
-// }
+#define GREEN(string) printfmt(T_GREEN "%s" RESET "\n", string);
+#define RED(string) printfmt(T_RED "%s" RESET "\n", string);
+#define YELLOW(string) printfmt(T_YELLOW "%s" RESET "\n", string);
 
 void
-test_0()
-{
-	printfmt("realloc 1:\n");
-	char *var1 = realloc(NULL, 64);
-
-	printfmt("realloc 2:\n");
-	char *var2 = realloc(NULL, 64);
-
-	printfmt("realloc 3:\n");
-	char *var3 = realloc(NULL, 64);
-
-	printfmt("realloc 4:\n");
-	char *var4 = realloc(NULL, 64);
-
-	strcpy(var2, "Probando");
-
-	free(var1);
-	free(var3);
-
-	printfmt("realloc test:\n");
-	char *var_test = realloc(var2, 180);
-
-	printfmt("Texto: %s\n", var_test);
-
-
-	free(var4);
-	free(var_test);
-
-	// free(var2);
-	// free(var1);
+assert_ok(bool ok, char* desc){
+	if(ok)
+		GREEN(desc)
+	else
+		RED(desc)
 }
 
 void
-test_1()
-{
-	// Test
-	printfmt("malloc 1:\n");
-	char *var1 = malloc(32);
-	printfmt("malloc 2:\n");
-	char *var2 = malloc(32);
-	printfmt("malloc 3:\n");
-	char *var3 = malloc(32);
+test_malloc_with_zero(){
 
-	free(var1);
-	free(var2);
-
-	printfmt("malloc 4:\n");
-	char *var4 = malloc(64 + 64 + 64);
-
-	// strcpy(var1, "Test 1");
-	strcpy(var3, "Test 3");
-	strcpy(var4, "Test 4");
-
-	// printfmt("%s\n", var1);
-	printfmt("%s\n", var3);
-	printfmt("%s\n", var4);
-
-	// free(var1);
-
-	free(var3);
-	free(var3);
-	free(var4);
+	YELLOW("LLAMADA A MALLOC CON 0")
+	char* isNull = malloc(0);
+	assert_ok(!isNull, "Malloc con 0 es null");
+	assert_ok(stats.malloc_calls == 1, "Llamadas a malloc es 1");
+	assert_ok(stats.requested_amnt == 0, "Cantidad pedida es 0");
+	assert_ok(stats.curr_blocks == 0, "Cantidad de bloques es 0");
+	assert_ok(stats.total_blocks == 0, "Cantidad total de bloques es 0");
+	assert_ok(stats.curr_regions == 0, "Cantidad de regiones es 0");
+	assert_ok(stats.mapped_amnt == 0, "Tamanio del heap es 0");
 }
 
 void
-test_2()
-{
-	printfmt("malloc 1:\n");
-	char *var1 = malloc(32);
-	printfmt("malloc 2:\n");
-	char *var2 = malloc(16241);
-	printfmt("malloc 3:\n");
-	char *var3 = malloc(32);
-	printfmt("malloc 4:\n");
-	char *var4 = malloc(32);
-
-	free(var4);
-	free(var3);
-	free(var2);
-	free(var1);
-
-	printfmt("malloc 5:\n");
-	char *var5 = malloc(32);
-	free(var5);
+test_malloc_lt_64(){
+	YELLOW("LLAMADA A MALLOC CON 32")
+	char* ptr = malloc(32);
+	assert_ok(ptr, "Malloc con 32 no es null");
+	assert_ok(stats.malloc_calls == 1, "Llamadas a malloc es 1");
+	assert_ok(stats.requested_amnt == 32, "Cantidad pedida es 32");
+	assert_ok(stats.given_amnt == 64, "Cantidad recibida es 64");
+	assert_ok(stats.curr_blocks == 1, "Cantidad de bloques es 1");
+	assert_ok(stats.total_blocks == 1, "Cantidad total de bloques es 1");
+	assert_ok(stats.curr_regions == 2, "Cantidad de regiones es 2");
+	assert_ok(stats.splitted_amnt == 1, "Se realizaron 1 splits");
+	assert_ok(stats.mapped_amnt == BLOCK_SM, "Tamanio del heap es 16KiB" );
+	free(ptr);
 }
 
 void
-test_3()
-{
-	printfmt("malloc 1:\n");
-	char *var1 = malloc(32);
-	char *var_nul = NULL;
-
-	free(((char *) var1) + 1);      // libero dentro del bloque pero corrido
-	free(var_nul);                  // libero nulo
-	free(((char *) var1) - 50);     // libero antes del bloque
-	free(((char *) var1) + 17000);  // libero despues del bloque
-
-	free(var1);
-	free(var1);  // libero dos veces
+test_malloc_gt_64_sm_block(){
+	YELLOW("LLAMADA A MALLOC CON 64 < x < 16KiB")
+	char* ptr = malloc(150);
+	assert_ok(ptr, "Malloc con 150 no es null");
+	assert_ok(stats.malloc_calls == 1, "Llamadas a malloc es 1");
+	assert_ok(stats.requested_amnt == 150, "Cantidad pedida es 150");
+	assert_ok(stats.given_amnt == ALIGN4(150), "Cantidad recibida es 152");
+	assert_ok(stats.curr_blocks == 1, "Cantidad de bloques es 1");
+	assert_ok(stats.total_blocks == 1, "Cantidad total de bloques es 1");
+	assert_ok(stats.curr_regions == 2, "Cantidad de regiones es 2");
+	assert_ok(stats.splitted_amnt == 1, "Se realizaron 1 splits");
+	assert_ok(stats.mapped_amnt == BLOCK_SM, "Tamanio del heap es 16KiB" );
+	free(ptr);
 }
 
 void
-test_4()
-{
-	printfmt("malloc 1:\n");
-	char *var1 = malloc(64);
-
-	printfmt("malloc 2:\n");
-	char *var2 = malloc(64 * 3);
-
-	printfmt("malloc 3:\n");
-	char *var3 = malloc(64);
-
-	printfmt("malloc 4:\n");
-	char *var4 = malloc(64);
-
-	printfmt("malloc 5:\n");
-	char *var5 = malloc(64);
-
-
-	free(var2);
-	free(var4);
-
-	printfmt("malloc 6:\n");
-	char *var6 = malloc(64);
-
-	free(var1);
-	free(var3);
-	free(var5);
-	free(var6);
+test_malloc_close_to_16kb(){
+	YELLOW("LLAMADA A MALLOC CON CERCA 16KiB")
+	char* ptr = malloc(BLOCK_SM-40);
+	assert_ok(ptr, "Malloc con ~16KiB no es null");
+	assert_ok(stats.malloc_calls == 1, "Llamadas a malloc es 1");
+	assert_ok(stats.requested_amnt == BLOCK_SM-40, "Cantidad pedida es correcta");
+	assert_ok(stats.given_amnt == ALIGN4(BLOCK_SM-40), "Cantidad recibida es correcta");
+	assert_ok(stats.curr_blocks == 1, "Cantidad de bloques es 1");
+	assert_ok(stats.total_blocks == 1, "Cantidad total de bloques es 1");
+	assert_ok(stats.curr_regions == 1, "Cantidad de regiones es 1");
+	assert_ok(stats.splitted_amnt == 0, "Se realizaron 0 splits");
+	assert_ok(stats.mapped_amnt == BLOCK_SM, "Tamanio del heap es 16KiB" );
+	free(ptr);
 }
 
+void
+test_malloc_md_block(){
+	YELLOW("LLAMADA A MALLOC CON 16KiB < x < 1MiB")
+	char* ptr = malloc(BLOCK_SM + 150);
+	assert_ok(ptr, "Malloc con x no es null");
+	assert_ok(stats.malloc_calls == 1, "Llamadas a malloc es 1");
+	assert_ok(stats.requested_amnt == BLOCK_SM + 150, "Cantidad pedida es x");
+	assert_ok(stats.given_amnt == ALIGN4(BLOCK_SM + 150), "Cantidad recibida es correcta");
+	assert_ok(stats.curr_blocks == 1, "Cantidad de bloques es 1");
+	assert_ok(stats.total_blocks == 1, "Cantidad total de bloques es 1");
+	assert_ok(stats.curr_regions == 2, "Cantidad de regiones es 2");
+	assert_ok(stats.splitted_amnt == 1, "Se realizaron 1 splits");
+	assert_ok(stats.mapped_amnt == BLOCK_MD, "Tamanio del heap es 16KiB" );
+	free(ptr);
+}
 
-test_5()
+void
+test_malloc_lg_block(){
+	YELLOW("LLAMADA A MALLOC CON 1MiB < x < 32MiB")
+	char* ptr = malloc(BLOCK_MD + 150);
+	assert_ok(ptr, "Malloc con x no es null");
+	assert_ok(stats.malloc_calls == 1, "Llamadas a malloc es 1");
+	assert_ok(stats.requested_amnt == BLOCK_MD + 150, "Cantidad pedida es x");
+	assert_ok(stats.given_amnt == ALIGN4(BLOCK_MD + 150), "Cantidad recibida es correcta");
+	assert_ok(stats.curr_blocks == 1, "Cantidad de bloques es 1");
+	assert_ok(stats.total_blocks == 1, "Cantidad total de bloques es 1");
+	assert_ok(stats.curr_regions == 2, "Cantidad de regiones es 2");
+	assert_ok(stats.splitted_amnt == 1, "Se realizaron 1 splits");
+	assert_ok(stats.mapped_amnt == BLOCK_LG, "Tamanio del heap es 16KiB" );
+	free(ptr);
+}
+
+void 
+test_multiple_blocks()
 {
-	printfmt("malloc 1:\n");
-	char *var1 = malloc(64);
+	YELLOW("LLAMADA MULTIPLES A MALLOC")
+	char* ptr1  = malloc(64);
+	char* ptr11 = malloc(64);
+	char* ptr12 = malloc(64);
+	assert_ok(stats.malloc_calls == 3, "Llamadas a malloc es 3");
+	assert_ok(stats.requested_amnt == 64*3, "Cantidad pedida es correcta");
+	assert_ok(stats.given_amnt == 64*3, "Cantidad recibida es correcta");
+	assert_ok(stats.curr_blocks == 1, "Cantidad de bloques es 1");
+	assert_ok(stats.total_blocks == 1, "Cantidad total de bloques es 1");
+	assert_ok(stats.curr_regions == 4, "Cantidad de regiones es 4");
+	assert_ok(stats.splitted_amnt == 3, "Se realizaron 1 splits");
+	assert_ok(stats.mapped_amnt == BLOCK_SM, "Tamanio del heap es 16KiB" );
 
-	printfmt("malloc 6:\n");
-	char *var6 = malloc(20000);
+	char* ptr2  = malloc(BLOCK_SM + 150);
+	char* ptr3  = malloc(BLOCK_MD + 150);
 
-	printfmt("malloc 2:\n");
-	char *var2 = malloc(64 * 3);
+	assert_ok(stats.malloc_calls == 5, "Llamadas a malloc es 5");
+	assert_ok(stats.requested_amnt == 64*3+BLOCK_SM + 150+BLOCK_MD + 150, "Cantidad pedida es correcta");
+	assert_ok(stats.given_amnt == 64*3 + ALIGN4(BLOCK_SM + 150) + ALIGN4(BLOCK_MD + 150), "Cantidad recibida es correcta");
+	assert_ok(stats.curr_blocks == 3, "Cantidad de bloques es 3");
+	assert_ok(stats.total_blocks == 3, "Cantidad total de bloques es 3");
+	assert_ok(stats.curr_regions == 8, "Cantidad de regiones es 8");
+	assert_ok(stats.splitted_amnt == 5, "Se realizaron 1 splits");
+	assert_ok(stats.mapped_amnt == BLOCK_LG + BLOCK_MD + BLOCK_SM, "Tamanio del heap es correcto" );
+	free(ptr1);
+	free(ptr11);
+	free(ptr12);
+	free(ptr2);
+	free(ptr3);
+}
 
-	printfmt("malloc 3:\n");
-	char *var3 = malloc(64);
+void
+test_malloc()
+{
+	RUN_TEST(test_malloc_with_zero)
+	CLEAN_STATS
 
-	printfmt("malloc 4:\n");
-	char *var4 = malloc(64);
+	RUN_TEST(test_malloc_lt_64)
+	CLEAN_STATS
 
-	printfmt("malloc 5:\n");
-	char *var5 = malloc(64);
+	RUN_TEST(test_malloc_gt_64_sm_block)
+	CLEAN_STATS
 
+	RUN_TEST(test_malloc_close_to_16kb)
+	CLEAN_STATS
 
-	free(var2);
-	free(var4);
-	free(var6);
+	RUN_TEST(test_malloc_md_block)
+	CLEAN_STATS
 
-	printfmt("malloc prueba:\n");
-	char *var7 = malloc(64);
+	RUN_TEST(test_malloc_lg_block)
+	CLEAN_STATS
 
-	free(var1);
-	free(var3);
-	free(var5);
-	free(var7);
+	RUN_TEST(test_multiple_blocks)
+	CLEAN_STATS
+}
+
+void
+test_calloc()
+{
+	YELLOW("TO BE IMPLEMENTED")
+}
+
+void
+test_realloc()
+{
+	YELLOW("TO BE IMPLEMENTED")
+}
+
+void
+test_free()
+{
+	YELLOW("TO BE IMPLEMENTED")
 }
 
 int
 main(void)
-{
-	test_0();
-	//   test_1();
-	//    test_2();
-	//    test_3();
+{	
+	test_malloc();
 
-	// test_4();
-	// test_5();
+	test_calloc();
+
+	test_realloc();
+
+	test_free();
+
+#ifdef BEST_FIT
+	test_best_fit();
+#endif
+#ifdef FIRST_FIT
+	test_first_fit();
+#endif
+
 	return 0;
 }

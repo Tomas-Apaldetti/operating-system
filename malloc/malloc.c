@@ -262,6 +262,10 @@ new_block(size_t size)
 		errno = ENOMEM;
 		return NULL;
 	}
+	INCREASE_STATS(mapped_amnt, new_block_size);
+	INCREASE_STATS(total_blocks, 1);
+	INCREASE_STATS(curr_blocks, 1);
+	INCREASE_STATS(curr_regions, 1);
 
 	new_block_header->size = new_block_size;
 	append_block(new_block_header);
@@ -647,7 +651,7 @@ handle_realloc(region_header_t *region, size_t size)
 	if (region->size == size)
 		return REGION2PTR(region);
 
-	if (region->size > size) {
+	if (region->size > size)
 		return handle_realloc_less_memory(region, size);
 
 	return handle_realloc_more_memory(region, size);
@@ -656,6 +660,8 @@ handle_realloc(region_header_t *region, size_t size)
 void *
 malloc(size_t size)
 {
+	INCREASE_STATS(malloc_calls, 1);
+
 	region_header_t *region;
 
 	if (size == 0)
@@ -673,7 +679,7 @@ malloc(size_t size)
 	if (size < MIN_REGION_LEN)
 		size = MIN_REGION_LEN;
 
-	INCREASE_STATS(malloc_calls, 1);
+	
 	INCREASE_STATS(given_amnt, size);
 
 	region = find_free_region(size);
@@ -686,8 +692,8 @@ malloc(size_t size)
 	region->free = false;
 	try_split_region(region, size);
 
-	// lo hice para ir viendo cómo va todo
-	print_blocks();
+	// // lo hice para ir viendo cómo va todo
+	// print_blocks();
 
 	return REGION2PTR(region);
 }
@@ -736,8 +742,8 @@ realloc(void *ptr, size_t size)
 
 	void *aux = handle_realloc(PTR2REGION(ptr), size);
 
-	// lo hice para ir viendo cómo va todo
-	print_blocks();
+	// // lo hice para ir viendo cómo va todo
+	// print_blocks();
 
 	return aux;
 }

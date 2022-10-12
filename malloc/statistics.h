@@ -14,7 +14,7 @@ typedef struct stats{
     int splitted_amnt;
     int coalesced_amnt;
     int realloc_optimized;
-    int reallloc_no_optimized;
+    int realloc_no_optimized;
 } stats_t;
 
 extern stats_t stats;
