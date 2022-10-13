@@ -15,12 +15,14 @@
 #define BLOCK_MD (1 * MiB)
 #define BLOCK_LG (32 * MiB)
 
+#define MIN_REGION_LEN 64
+
 #ifdef USE_STATS
 #include "statistics.h"
-stats_t stats;
+extern stats_t stats;
 #define CLEAN_STATS                                                            \
 	{                                                                      \
-		YELLOW("LIMPIANDO STATS")                                      \
+		YELLOW("")                                                     \
 		reset_stats();                                                 \
 	}
 
@@ -49,165 +51,257 @@ assert_ok(bool ok, char *desc)
 }
 
 void
-test_malloc_with_zero()
+test_malloc_with_size_zero_ok()
 {
-	YELLOW("LLAMADA A MALLOC CON 0")
-	char *isNull = malloc(0);
-	assert_ok(!isNull, "Malloc con 0 es null");
-	assert_ok(stats.malloc_calls == 1, "Llamadas a malloc es 1");
-	assert_ok(stats.requested_amnt == 0, "Cantidad pedida es 0");
-	assert_ok(stats.curr_blocks == 0, "Cantidad de bloques es 0");
-	assert_ok(stats.total_blocks == 0, "Cantidad total de bloques es 0");
-	assert_ok(stats.curr_regions == 0, "Cantidad de regiones es 0");
-	assert_ok(stats.mapped_amnt == 0, "Tamanio del heap es 0");
+	YELLOW("LLAMADA A MALLOC: size = 0")
+
+	size_t size = 0;
+	char *ptr = malloc(size);
+
+	assert_ok(ptr == NULL,
+	          "Cuando se realiza malloc con size cero devuelve nulo");
+
+	assert_ok(stats.malloc_calls == 1,
+	          "La cantidad de llamadas a malloc es uno");
+
+	assert_ok(stats.requested_amnt == size,
+	          "La cantidad de memoria pedida es cero");
+	assert_ok(stats.mapped_amnt == 0,
+	          "La cantidad de memoria utilizada del heap es cero");
+
+	assert_ok(stats.curr_regions == 0,
+	          "La cantidad de regiones actuales es cero");
+	assert_ok(stats.curr_blocks == 0,
+	          "La cantidad de bloques actuales es cero");
+	assert_ok(stats.total_blocks == 0,
+	          "La cantidad de total de bloques es cero");
 }
 
 void
-test_malloc_lt_64()
+test_malloc_with_size_smaller_than_min_region_len_ok()
 {
-	YELLOW("LLAMADA A MALLOC CON 32")
-	char *ptr = malloc(32);
-	assert_ok(ptr, "Malloc con 32 no es null");
-	assert_ok(stats.malloc_calls == 1, "Llamadas a malloc es 1");
-	assert_ok(stats.requested_amnt == 32, "Cantidad pedida es 32");
-	assert_ok(stats.given_amnt == 64, "Cantidad recibida es 64");
-	assert_ok(stats.curr_blocks == 1, "Cantidad de bloques es 1");
-	assert_ok(stats.total_blocks == 1, "Cantidad total de bloques es 1");
-	assert_ok(stats.curr_regions == 2, "Cantidad de regiones es 2");
-	assert_ok(stats.splitted_amnt == 1, "Se realizaron 1 splits");
-	assert_ok(stats.mapped_amnt == BLOCK_SM, "Tamanio del heap es 16KiB");
+	YELLOW("LLAMADA A MALLOC: 0 < size < MIN_REGION_LEN")
+
+	size_t size = MIN_REGION_LEN / 2;
+	char *ptr = malloc(size);
+
+	assert_ok(ptr != NULL, "Cuando se realiza malloc con el size especificado no devuelve nulo");
+
+	assert_ok(stats.malloc_calls == 1,
+	          "La cantidad de llamadas a malloc es uno");
+
+	assert_ok(stats.requested_amnt == size,
+	          "La cantidad de memoria pedida es correcta");
+	assert_ok(stats.given_amnt == MIN_REGION_LEN,
+	          "La cantidad de memoria dada al usuario es correcta");
+	assert_ok(stats.mapped_amnt == BLOCK_SM, "La cantidad de memoria utilizada del heap es de un bloque chico");
+
+	assert_ok(stats.splitted_amnt == 1,
+	          "La cantidad de splits realizados es uno");
+	assert_ok(stats.curr_regions == 2,
+	          "La cantidad de regiones actuales es dos");
+	assert_ok(stats.curr_blocks == 1,
+	          "La cantidad de bloques actuales es uno");
+	assert_ok(stats.total_blocks == 1,
+	          "La cantidad de total de bloques es uno");
+
 	free(ptr);
 }
 
 void
-test_malloc_gt_64_sm_block()
+test_malloc_with_size_between_min_region_len_and_the_size_of_small_block()
 {
-	YELLOW("LLAMADA A MALLOC CON 64 < x < 16KiB")
-	char *ptr = malloc(150);
-	assert_ok(ptr, "Malloc con 150 no es null");
-	assert_ok(stats.malloc_calls == 1, "Llamadas a malloc es 1");
-	assert_ok(stats.requested_amnt == 150, "Cantidad pedida es 150");
-	assert_ok(stats.given_amnt == ALIGN4(150), "Cantidad recibida es 152");
-	assert_ok(stats.curr_blocks == 1, "Cantidad de bloques es 1");
-	assert_ok(stats.total_blocks == 1, "Cantidad total de bloques es 1");
-	assert_ok(stats.curr_regions == 2, "Cantidad de regiones es 2");
-	assert_ok(stats.splitted_amnt == 1, "Se realizaron 1 splits");
-	assert_ok(stats.mapped_amnt == BLOCK_SM, "Tamanio del heap es 16KiB");
+	YELLOW("LLAMADA A MALLOC: MIN_REGION_LEN < size < BLOCK_SM")
+
+	size_t size = MIN_REGION_LEN * 2;
+	char *ptr = malloc(size);
+
+	assert_ok(ptr != NULL, "Cuando se realiza malloc el size especificado no devuelve nulo");
+
+	assert_ok(stats.malloc_calls == 1,
+	          "La cantidad de llamadas a malloc es uno");
+
+	assert_ok(stats.requested_amnt == size,
+	          "La cantidad de memoria pedida es correcta");
+	assert_ok(stats.given_amnt == size,
+	          "La cantidad de memoria dada al usuario es correcta");
+	assert_ok(stats.mapped_amnt == BLOCK_SM, "La cantidad de memoria utilizada del heap es de un bloque chico");
+
+	assert_ok(stats.splitted_amnt == 1,
+	          "La cantidad de splits realizados es uno");
+	assert_ok(stats.curr_regions == 2,
+	          "La cantidad de regiones actuales es dos");
+	assert_ok(stats.curr_blocks == 1,
+	          "La cantidad de bloques actuales es uno");
+	assert_ok(stats.total_blocks == 1,
+	          "La cantidad de total de bloques es uno");
+
 	free(ptr);
 }
 
 void
-test_malloc_close_to_16kb()
+test_malloc_with_size_close_to_the_size_of_small_block()
 {
-	YELLOW("LLAMADA A MALLOC CON CERCA 16KiB")
-	char *ptr = malloc(BLOCK_SM - 40);
-	assert_ok(ptr, "Malloc con ~16KiB no es null");
-	assert_ok(stats.malloc_calls == 1, "Llamadas a malloc es 1");
-	assert_ok(stats.requested_amnt == BLOCK_SM - 40,
-	          "Cantidad pedida es correcta");
-	assert_ok(stats.given_amnt == ALIGN4(BLOCK_SM - 40),
-	          "Cantidad recibida es correcta");
-	assert_ok(stats.curr_blocks == 1, "Cantidad de bloques es 1");
-	assert_ok(stats.total_blocks == 1, "Cantidad total de bloques es 1");
-	assert_ok(stats.curr_regions == 1, "Cantidad de regiones es 1");
-	assert_ok(stats.splitted_amnt == 0, "Se realizaron 0 splits");
-	assert_ok(stats.mapped_amnt == BLOCK_SM, "Tamanio del heap es 16KiB");
+	YELLOW("LLAMADA A MALLOC: size ≈ BLOCK_SM")
+
+	size_t size = BLOCK_SM - 40;
+	char *ptr = malloc(size);
+
+	assert_ok(ptr != NULL, "Cuando se realiza malloc el size especificado no devuelve nulo");
+
+	assert_ok(stats.malloc_calls == 1,
+	          "La cantidad de llamadas a malloc es uno");
+
+	assert_ok(stats.requested_amnt == size,
+	          "La cantidad de memoria pedida es correcta");
+	assert_ok(stats.given_amnt == size,
+	          "La cantidad de memoria dada al usuario es correcta");
+	assert_ok(stats.mapped_amnt == BLOCK_SM, "La cantidad de memoria utilizada del heap es de un bloque chico");
+
+	assert_ok(stats.splitted_amnt == 0,
+	          "La cantidad de splits realizados es cero");
+	assert_ok(stats.curr_regions == 1,
+	          "La cantidad de regiones actuales es uno");
+	assert_ok(stats.curr_blocks == 1,
+	          "La cantidad de bloques actuales es uno");
+	assert_ok(stats.total_blocks == 1,
+	          "La cantidad de total de bloques es uno");
+
 	free(ptr);
 }
 
 void
-test_malloc_md_block()
+test_malloc_with_size_between_the_size_of_small_block_and_medium_block()
 {
-	YELLOW("LLAMADA A MALLOC CON 16KiB < x < 1MiB")
-	char *ptr = malloc(BLOCK_SM + 150);
-	assert_ok(ptr, "Malloc con x no es null");
-	assert_ok(stats.malloc_calls == 1, "Llamadas a malloc es 1");
-	assert_ok(stats.requested_amnt == BLOCK_SM + 150, "Cantidad pedida es x");
-	assert_ok(stats.given_amnt == ALIGN4(BLOCK_SM + 150),
-	          "Cantidad recibida es correcta");
-	assert_ok(stats.curr_blocks == 1, "Cantidad de bloques es 1");
-	assert_ok(stats.total_blocks == 1, "Cantidad total de bloques es 1");
-	assert_ok(stats.curr_regions == 2, "Cantidad de regiones es 2");
-	assert_ok(stats.splitted_amnt == 1, "Se realizaron 1 splits");
-	assert_ok(stats.mapped_amnt == BLOCK_MD, "Tamanio del heap es 16KiB");
+	YELLOW("LLAMADA A MALLOC: BLOCK_SM < size < BLOCK_MD")
+
+	size_t size = BLOCK_SM + MIN_REGION_LEN;
+	char *ptr = malloc(size);
+
+	assert_ok(ptr != NULL, "Cuando se realiza malloc el size especificado no devuelve nulo");
+
+	assert_ok(stats.malloc_calls == 1,
+	          "La cantidad de llamadas a malloc es uno");
+
+	assert_ok(stats.requested_amnt == size,
+	          "La cantidad de memoria pedida es correcta");
+	assert_ok(stats.given_amnt == size,
+	          "La cantidad de memoria dada al usuario es correcta");
+	assert_ok(stats.mapped_amnt == BLOCK_MD, "La cantidad de memoria utilizada del heap es de un bloque mediano");
+
+	assert_ok(stats.splitted_amnt == 1,
+	          "La cantidad de splits realizados es uno");
+	assert_ok(stats.curr_regions == 2,
+	          "La cantidad de regiones actuales es dos");
+	assert_ok(stats.curr_blocks == 1,
+	          "La cantidad de bloques actuales es uno");
+	assert_ok(stats.total_blocks == 1,
+	          "La cantidad de total de bloques es uno");
+
 	free(ptr);
 }
 
 void
-test_malloc_lg_block()
+test_malloc_with_size_between_the_size_of_medium_block_and_large_block()
 {
-	YELLOW("LLAMADA A MALLOC CON 1MiB < x < 32MiB")
-	char *ptr = malloc(BLOCK_MD + 150);
-	assert_ok(ptr, "Malloc con x no es null");
-	assert_ok(stats.malloc_calls == 1, "Llamadas a malloc es 1");
-	assert_ok(stats.requested_amnt == BLOCK_MD + 150, "Cantidad pedida es x");
-	assert_ok(stats.given_amnt == ALIGN4(BLOCK_MD + 150),
-	          "Cantidad recibida es correcta");
-	assert_ok(stats.curr_blocks == 1, "Cantidad de bloques es 1");
-	assert_ok(stats.total_blocks == 1, "Cantidad total de bloques es 1");
-	assert_ok(stats.curr_regions == 2, "Cantidad de regiones es 2");
-	assert_ok(stats.splitted_amnt == 1, "Se realizaron 1 splits");
-	assert_ok(stats.mapped_amnt == BLOCK_LG, "Tamanio del heap es 16KiB");
+	YELLOW("LLAMADA A MALLOC: BLOCK_MD < size < BLOCK_LG")
+
+	size_t size = BLOCK_MD + MIN_REGION_LEN;
+	char *ptr = malloc(size);
+
+	assert_ok(ptr != NULL, "Cuando se realiza malloc el size especificado no devuelve nulo");
+
+	assert_ok(stats.malloc_calls == 1,
+	          "La cantidad de llamadas a malloc es uno");
+
+	assert_ok(stats.requested_amnt == size,
+	          "La cantidad de memoria pedida es correcta");
+	assert_ok(stats.given_amnt == size,
+	          "La cantidad de memoria dada al usuario es correcta");
+	assert_ok(stats.mapped_amnt == BLOCK_LG, "La cantidad de memoria utilizada del heap es de un bloque grande");
+
+	assert_ok(stats.splitted_amnt == 1,
+	          "La cantidad de splits realizados es uno");
+	assert_ok(stats.curr_regions == 2,
+	          "La cantidad de regiones actuales es dos");
+	assert_ok(stats.curr_blocks == 1,
+	          "La cantidad de bloques actuales es uno");
+	assert_ok(stats.total_blocks == 1,
+	          "La cantidad de total de bloques es uno");
+
 	free(ptr);
 }
 
 void
 test_multiple_blocks()
 {
-	YELLOW("LLAMADA MULTIPLES A MALLOC")
-	char *ptr1 = malloc(64);
-	char *ptr11 = malloc(64);
-	char *ptr12 = malloc(64);
-	assert_ok(stats.malloc_calls == 3, "Llamadas a malloc es 3");
-	assert_ok(stats.requested_amnt == 64 * 3, "Cantidad pedida es correcta");
-	assert_ok(stats.given_amnt == 64 * 3, "Cantidad recibida es correcta");
-	assert_ok(stats.curr_blocks == 1, "Cantidad de bloques es 1");
-	assert_ok(stats.total_blocks == 1, "Cantidad total de bloques es 1");
-	assert_ok(stats.curr_regions == 4, "Cantidad de regiones es 4");
-	assert_ok(stats.splitted_amnt == 3, "Se realizaron 1 splits");
-	assert_ok(stats.mapped_amnt == BLOCK_SM, "Tamanio del heap es 16KiB");
+	YELLOW("LLAMADAs MULTIPLES A MALLOC")
 
-	char *ptr2 = malloc(BLOCK_SM + 150);
-	char *ptr3 = malloc(BLOCK_MD + 150);
+	char *ptr1_block1;
+	char *ptr2_block1;
+	char *ptr3_block1;
 
-	assert_ok(stats.malloc_calls == 5, "Llamadas a malloc es 5");
-	assert_ok(stats.requested_amnt == 64 * 3 + BLOCK_SM + 150 + BLOCK_MD + 150,
-	          "Cantidad pedida es correcta");
-	assert_ok(stats.given_amnt == 64 * 3 + ALIGN4(BLOCK_SM + 150) +
-	                                      ALIGN4(BLOCK_MD + 150),
-	          "Cantidad recibida es correcta");
-	assert_ok(stats.curr_blocks == 3, "Cantidad de bloques es 3");
-	assert_ok(stats.total_blocks == 3, "Cantidad total de bloques es 3");
-	assert_ok(stats.curr_regions == 8, "Cantidad de regiones es 8");
-	assert_ok(stats.splitted_amnt == 5, "Se realizaron 1 splits");
+	char *ptr1_block2;
+
+	char *ptr1_block3;
+
+	size_t size;
+
+	ptr1_block1 = malloc(MIN_REGION_LEN);
+	ptr2_block1 = malloc(MIN_REGION_LEN);
+	ptr1_block2 = malloc(BLOCK_MD - 40);
+	ptr1_block3 = malloc(BLOCK_MD + MIN_REGION_LEN);
+	ptr3_block1 = malloc(MIN_REGION_LEN);
+
+	size = MIN_REGION_LEN * 3 + (BLOCK_MD - 40) + (BLOCK_MD + MIN_REGION_LEN);
+
+
+	assert_ok(stats.malloc_calls == 5,
+	          "La cantidad de llamadas a malloc es cinco");
+
+	assert_ok(stats.requested_amnt == size,
+	          "La cantidad de memoria pedida es correcta");
+	assert_ok(stats.given_amnt == size,
+	          "La cantidad de memoria dada al usuario es correcta");
 	assert_ok(stats.mapped_amnt == BLOCK_LG + BLOCK_MD + BLOCK_SM,
-	          "Tamanio del heap es correcto");
-	free(ptr1);
-	free(ptr11);
-	free(ptr12);
-	free(ptr2);
-	free(ptr3);
+	          "La cantidad de memoria utilizada del heap es de un bloque "
+	          "grande, un bloque mediano y un bloque chicho");
+
+	assert_ok(stats.splitted_amnt == 4,
+	          "La cantidad de splits realizados es cuatro");
+	assert_ok(stats.curr_regions == 7,
+	          "La cantidad de regiones actuales es siete");
+	assert_ok(stats.curr_blocks == 3,
+	          "La cantidad de bloques actuales es uno");
+	assert_ok(stats.total_blocks == 3,
+	          "La cantidad de total de bloques es uno");
+
+	free(ptr1_block1);
+	free(ptr2_block1);
+	free(ptr3_block1);
+	free(ptr1_block2);
+	free(ptr1_block3);
 }
 
 void
 test_malloc()
 {
-	RUN_TEST(test_malloc_with_zero)
+	RUN_TEST(test_malloc_with_size_zero_ok)
 	CLEAN_STATS
 
-	RUN_TEST(test_malloc_lt_64)
+	RUN_TEST(test_malloc_with_size_smaller_than_min_region_len_ok)
 	CLEAN_STATS
 
-	RUN_TEST(test_malloc_gt_64_sm_block)
+	RUN_TEST(test_malloc_with_size_between_min_region_len_and_the_size_of_small_block)
 	CLEAN_STATS
 
-	RUN_TEST(test_malloc_close_to_16kb)
+	RUN_TEST(test_malloc_with_size_close_to_the_size_of_small_block)
 	CLEAN_STATS
 
-	RUN_TEST(test_malloc_md_block)
+	RUN_TEST(test_malloc_with_size_between_the_size_of_small_block_and_medium_block)
 	CLEAN_STATS
 
-	RUN_TEST(test_malloc_lg_block)
+	RUN_TEST(test_malloc_with_size_between_the_size_of_medium_block_and_large_block)
 	CLEAN_STATS
 
 	RUN_TEST(test_multiple_blocks)

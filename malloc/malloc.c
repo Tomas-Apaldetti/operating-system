@@ -15,7 +15,7 @@
 
 #ifdef USE_STATS
 #include "statistics.h"
-stats_t stats;
+extern stats_t stats;
 #define INCREASE_STATS(stat_name, amnt) (stats.stat_name += amnt)
 #define DECREASE_STATS(stat_name, amnt) (stats.stat_name -= amnt)
 #else
@@ -32,7 +32,7 @@ stats_t stats;
 #define BLOCK2REGION(ptr) ((region_header_t *) (ptr + 1))
 
 #define SPLITREGION(ptr, size)                                                 \
-	(region_header_t *) ((byte) REGION2PTR(region) + size)
+	(region_header_t *) ((byte) REGION2PTR(ptr) + size)
 
 #define KiB 1024
 #define MiB (1024 * KiB)
