@@ -355,9 +355,75 @@ test_return_mmy_to_OS()
 }
 
 void
+test_coalesce_first_middle()
+{
+	YELLOW("TEST COALESCE FIRST MIDDLE")
+	char *ptr1 = malloc(150);
+	char *ptr2 = malloc(150);
+	char *ptr3 = malloc(150);
+
+	YELLOW("Libero el bloque de en medio")
+	free(ptr2);
+
+	assert_ok(stats.free_calls == 1, "Cantidad de free calls es 1");
+	assert_ok(stats.freed_amnt == ALIGN4(150),
+	          "Cantidad de memoria liberada es correcta");
+	assert_ok(stats.coalesced_amnt == 0, "No se realizo coalesce");
+
+	YELLOW("Libero el bloque de la izquierda")
+	free(ptr3);
+	assert_ok(stats.free_calls == 2, "Cantidad de free calls es 2");
+	assert_ok(stats.freed_amnt == ALIGN4(150) * 2,
+	          "Cantidad de memoria liberada es correcta");
+	assert_ok(stats.coalesced_amnt == 2, "Se realizo dos coalesce");
+	assert_ok(stats.curr_regions == 2,
+	          "La cantidad de regiones es correcta luego del coalesce");
+
+	YELLOW("Libero el bloque de la derecha")
+	free(ptr1);
+	assert_ok(stats.free_calls == 3, "Cantidad de free calls es 3");
+	assert_ok(stats.freed_amnt == ALIGN4(150) * 3,
+	          "Cantidad de memoria liberada es correcta");
+	assert_ok(stats.coalesced_amnt == 3, "Se realizo tres coalesce");
+}
+
+void
+test_coalesce_last_middle()
+{
+	YELLOW("TEST COALESCE LAST MIDDLE")
+	char *ptr1 = malloc(150);
+	char *ptr2 = malloc(150);
+	char *ptr3 = malloc(150);
+
+	YELLOW("Libero los bloques adyacentes")
+	free(ptr1);
+	free(ptr3);
+
+	assert_ok(stats.free_calls == 2, "Cantidad de free calls es 2");
+	assert_ok(stats.freed_amnt == ALIGN4(150) * 2,
+	          "Cantidad de memoria liberada es correcta");
+	assert_ok(stats.coalesced_amnt == 1, "Se realizo un coalesce");
+	assert_ok(stats.curr_regions == 3,
+	          "La cantidad de regiones es correcta luego del coalesce");
+
+	YELLOW("Libero bloque del medio")
+	free(ptr2);
+	assert_ok(stats.free_calls == 3, "Cantidad de free calls es 2");
+	assert_ok(stats.freed_amnt == ALIGN4(150) * 3,
+	          "Cantidad de memoria liberada es correcta");
+	assert_ok(stats.coalesced_amnt == 3, "Se realizo un coalesce");
+}
+
+void
 test_free()
 {
 	RUN_TEST(test_return_mmy_to_OS)
+	CLEAN_STATS
+
+	RUN_TEST(test_coalesce_first_middle)
+	CLEAN_STATS
+
+	RUN_TEST(test_coalesce_last_middle)
 	CLEAN_STATS
 }
 
