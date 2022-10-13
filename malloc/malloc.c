@@ -262,6 +262,7 @@ new_block(size_t size)
 		errno = ENOMEM;
 		return NULL;
 	}
+
 	INCREASE_STATS(mapped_amnt, new_block_size);
 	INCREASE_STATS(total_blocks, 1);
 	INCREASE_STATS(curr_blocks, 1);
@@ -693,7 +694,7 @@ malloc(size_t size)
 	try_split_region(region, size);
 
 	// // lo hice para ir viendo cómo va todo
-	// print_blocks();
+	print_blocks();
 
 	return REGION2PTR(region);
 }
@@ -768,7 +769,10 @@ free(void *ptr)
 
 	region_to_free = try_coalesce_regions(region_to_free);
 
-	if (are_all_block_free(region_to_free))
+	if (are_all_block_free(region_to_free)){
+		printfmt("libero bloque\n");
 		return_block_to_OS(region_to_free->block_header);
+	}
+		
 }
 

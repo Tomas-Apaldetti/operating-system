@@ -26,7 +26,7 @@ stats_t stats;
 #define RUN_TEST(test) test();
 #else
 #define CLEAN_STATS
-#define SETUP_TEST(test) printfmt("Can't run test without statistics defined");                                                       
+#define RUN_TEST(test) printfmt("Can't run test without statistics defined");                                                       
 #endif
 
 #define T_RED     "\x1b[31m"
@@ -200,9 +200,26 @@ test_malloc()
 }
 
 void
+test_calloc_contains_zero()
+{
+	YELLOW("LLAMADA A CALLOC CONTAINS ZERO")
+	char* ptr = calloc(1,150);
+
+	bool ok = true;
+	for(int i = 0; i < 150; i++){
+		if(ptr[i] != 0)
+			ok = false;
+	}
+
+	assert_ok(ok, "Calloc de 150 es puro 0");
+	free(ptr);
+}
+
+void
 test_calloc()
 {
-	YELLOW("TO BE IMPLEMENTED")
+	RUN_TEST(test_calloc_contains_zero)
+	CLEAN_STATS
 }
 
 void
@@ -211,15 +228,33 @@ test_realloc()
 	YELLOW("TO BE IMPLEMENTED")
 }
 
+void 
+test_return_mmy_to_OS()
+{
+	YELLOW("LIBERO BLOQUE Y SE DEVUELVE AL SISTEMA")
+	char* ptr = malloc(150);
+	printfmt("%d", ptr);
+	free(ptr);
+
+	assert_ok(stats.free_calls == 1, "Cantidad de free calls es correcta");
+	assert_ok(stats.freed_amnt == ALIGN4(150), "Cantidad de memoria liberada es correcta");
+	assert_ok(stats.curr_blocks == 0, "No hay bloques actuales");
+	assert_ok(stats.coalesced_amnt == 1, "Se realizo un coalesce");
+	assert_ok(stats.total_blocks == 1, "Se pidio un bloque antes de liberarlo");
+	assert_ok(stats.returned_blocks == 1, "Se devolvio un bloque");
+}
+
 void
 test_free()
 {
-	YELLOW("TO BE IMPLEMENTED")
+	RUN_TEST(test_return_mmy_to_OS)
+	CLEAN_STATS
 }
 
 int
 main(void)
 {	
+
 	test_malloc();
 
 	test_calloc();
