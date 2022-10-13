@@ -272,9 +272,9 @@ test_multiple_blocks()
 	assert_ok(stats.curr_regions == 7,
 	          "La cantidad de regiones actuales es siete");
 	assert_ok(stats.curr_blocks == 3,
-	          "La cantidad de bloques actuales es uno");
+	          "La cantidad de bloques actuales es tres");
 	assert_ok(stats.total_blocks == 3,
-	          "La cantidad de total de bloques es uno");
+	          "La cantidad de total de bloques es tres");
 
 	free(ptr1_block1);
 	free(ptr2_block1);
