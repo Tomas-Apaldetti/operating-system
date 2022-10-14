@@ -745,12 +745,9 @@ realloc(void *ptr, size_t size)
 		exit(INVALID_POINTER);
 	}
 
-	void *aux = handle_realloc(PTR2REGION(ptr), size);
+	void *new_ptr = handle_realloc(PTR2REGION(ptr), size);
 
-	// // lo hice para ir viendo cómo va todo
-	// print_blocks();
-
-	return aux;
+	return new_ptr;
 }
 
 void
