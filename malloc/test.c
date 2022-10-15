@@ -3,6 +3,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include <errno.h>
 
 #include "printfmt.h"
 
@@ -48,6 +49,9 @@ assert_ok(bool ok, char *desc)
 		GREEN(desc)
 	else
 		RED(desc)
+
+	// if (!ok)
+	// 	RED(desc)
 }
 
 
@@ -286,6 +290,37 @@ test_multiple_blocks()
 	free(ptr1_block3);
 }
 
+void 
+test_hard_limit()
+{
+	YELLOW("LIMITE DE MEMORIA TOTAL EN MALLOC")
+	void* ptr1 = malloc(BLOCK_LG - 64);
+	void* ptr2 = malloc(BLOCK_LG - 64);
+	void* ptr3 = malloc(BLOCK_LG - 64);
+	void* ptr4 = malloc(BLOCK_LG - 64);
+	void* ptr5 = malloc(BLOCK_LG - 64);
+	void* ptr6 = malloc(BLOCK_LG - 64);
+	void* ptr7 = malloc(BLOCK_LG - 64);
+	void* ptr8 = malloc(BLOCK_LG - 64);
+	void* ptr9 = malloc(BLOCK_LG - 64);
+	void* ptr10 = malloc(BLOCK_LG - 64);
+	void* ptr11 = malloc(BLOCK_LG - 64);
+
+	assert_ok(!ptr11, "Puntero fuera del limite es nulo");
+	assert_ok(errno == ENOMEM, "ENOMEM esta seteado");
+
+	free(ptr1);
+	free(ptr2);
+	free(ptr3);
+	free(ptr4);
+	free(ptr5);
+	free(ptr6);
+	free(ptr7);
+	free(ptr8);
+	free(ptr9);
+	free(ptr10);
+}
+
 void
 test_malloc()
 {
@@ -308,6 +343,9 @@ test_malloc()
 	CLEAN_STATS
 
 	RUN_TEST(test_multiple_blocks)
+	CLEAN_STATS
+
+	RUN_TEST(test_hard_limit)
 	CLEAN_STATS
 }
 
@@ -395,39 +433,243 @@ test_realloc_with_size_zero_frees_the_poninter_ok()
 	          "La cantidad de total de bloques es uno");
 }
 
-/*
 void
-test_realloc_with_null_pointer_and_size_zero_returns_null_ok()
+test_realloc_with_size_zero_pointer_null()
 {
-        YELLOW("");
+	YELLOW("LLAMADA A REALLOC CON NULL Y TAMAÑO = 0");
 
-        assert_ok(true, "");
+	size_t size = 0;
+	char *ptr = realloc(NULL, size);
+
+	assert_ok(!ptr, "Realloc pointer NULL, size 0, devuelve NULL");
+
+	assert_ok(stats.malloc_calls == 1, "Cantidad de malloc calls es correcta");
+
+	assert_ok(stats.requested_amnt == 0,
+	          "La cantidad de memoria pedida es correcta");
+	assert_ok(stats.given_amnt == 0,
+	          "La cantidad de memoria dada al usuario es correcta");
 }
 
 void
-test_realloc_of_larger_size_than_prev_mem_is_handled_ok()
+test_realloc_less_mmy()
 {
-        YELLOW("");
+	YELLOW("REALLOC WITH LESS MEMORY THAN ORIGINAL")
+	int size_before = MIN_REGION_LEN * 2;
+	int size_after = MIN_REGION_LEN;
+	void *ptr_before = malloc(size_before);
+	void *ptr_after = realloc(ptr_before, size_after);
 
-        assert_ok(true, "");
+	assert_ok(ptr_after, "Puntero no es NULL");
+	assert_ok(ptr_after == ptr_before, "Puntero es lo mismo");
+
+	assert_ok(stats.malloc_calls == 1, "Solo una llamada a malloc");
+	
+	assert_ok(stats.requested_amnt == size_before,
+	          "La cantidad de memoria pedida es correcta");
+	
+	assert_ok(stats.given_amnt == size_before,
+	          "La cantidad de memoria dada al usuario es correcta");
+	assert_ok(stats.splitted_amnt == 2,
+	          "La cantidad de splits realizados es dos");
+	assert_ok(stats.curr_regions == 2,
+	          "La cantidad de regiones actuales es dos");
+	assert_ok(stats.coalesced_amnt == 1, "La cantidad de coalesce es uno");
+
+	free(ptr_after);
 }
 
 void
-test_realloc_of_smaller_size_than_prev_mem_is_handled_ok()
+test_realloc_less_mmy_next_ocuppied_can_split()
 {
-        YELLOW("");
+	YELLOW("REALLOC WITH LESS MEMORY THAN ORIGINAL NEXT IS OCCUPPIED CAN "
+	       "SPLIT")
+	int size_before = MIN_REGION_LEN * 3;
+	int size_after = MIN_REGION_LEN;
+	void *ptr_before = malloc(size_before);
+	void *ptr_next = malloc(size_before);
+	void *ptr_after = realloc(ptr_before, size_after);
 
-        assert_ok(true, "");
+	assert_ok(ptr_after, "Puntero no es NULL");
+	assert_ok(ptr_after == ptr_before, "Puntero es lo mismo");
+
+	assert_ok(stats.malloc_calls == 2, "Solo una llamada a malloc");
+
+	assert_ok(stats.requested_amnt == size_before * 2,
+	          "La cantidad de memoria pedida es correcta");
+	assert_ok(stats.splitted_amnt == 3,
+	          "La cantidad de splits realizados es tres");
+	assert_ok(stats.curr_regions == 4,
+	          "La cantidad de regiones actuales es cuatro");
+	assert_ok(stats.coalesced_amnt == 0, "La cantidad de coalesce es cero");
+
+	free(ptr_after);
+	free(ptr_next);
 }
 
 void
-test_realloc_of_equal_size_as_prev_mem_returns_the_same_ptr_ok()
-{
-        YELLOW("");
+test_realloc_less_mmy_next_ocuppied_can_not_split(){
+	YELLOW("REALLOC WITH LESS MEMORY THAN ORIGINAL NEXT IS OCCUPPIED CAN NOT "
+	       "SPLIT")
+	int size_before = MIN_REGION_LEN * 2;
+	int size_after = MIN_REGION_LEN;
+	void *ptr_before = malloc(size_before); 
+	void *ptr_next = malloc(size_before);
+	void *ptr_after = realloc(ptr_before, size_after);
 
-        assert_ok(true, "");
+	assert_ok(ptr_after, "Puntero no es NULL");
+	assert_ok(ptr_after == ptr_before, "Puntero es lo mismo");
+
+	assert_ok(stats.malloc_calls == 2, "Solo una llamada a malloc");
+
+	assert_ok(stats.requested_amnt == size_before * 2,
+	          "La cantidad de memoria pedida es correcta");
+	assert_ok(stats.splitted_amnt == 2,
+	          "La cantidad de splits realizados es dos");
+	assert_ok(stats.curr_regions == 3,
+	          "La cantidad de regiones actuales es dos");
+	assert_ok(stats.coalesced_amnt == 0, "La cantidad de coalesce es cero");
+
+	free(ptr_after);
+	free(ptr_next);
 }
-*/
+
+void
+test_realloc_more_mmy_next_free()
+{
+	YELLOW("REALLOC WITH NEXT FREE SIZE ENOUGH")
+	int size_before = MIN_REGION_LEN;
+	int size_after = MIN_REGION_LEN * 2;
+	void* ptr_before = malloc(size_before);
+	void* ptr_after = realloc(ptr_before, size_after);
+
+	assert_ok(ptr_before == ptr_after, "Punteros son los mismos");
+
+	assert_ok(stats.requested_amnt == size_after, "Cantidad pedida es correcta");
+
+	assert_ok(stats.curr_regions == 2, "Cantidad de regiones es correcta");
+
+	assert_ok(stats.coalesced_amnt == 1, "Cantidad de coalesce es correcta");
+
+	assert_ok(stats.realloc_optimized == 1, "Realloc es con optimizacion");
+
+	free(ptr_after);
+}
+
+void
+cpy(char* ptr, char end){
+	for(char i = 0; i < end; i++)
+		ptr[i] = i;
+}
+
+bool
+rev(char* ptr, char end){
+	for(char i = 0; i < end; i++)
+		if(ptr[i] != i)
+			return false;
+
+	return true;
+}
+
+void
+test_realloc_more_mmy_prev_free()
+{
+	YELLOW("REALLOC WITH PREV FREE SIZE ENOUGH")
+	int size_before = MIN_REGION_LEN;
+	int size_after = MIN_REGION_LEN * 2;
+	char* ptr_prev = malloc(size_before);
+	char* ptr_before = malloc(size_before);
+	char* ptr_next = malloc(size_before);
+
+	cpy(ptr_before, MIN_REGION_LEN);
+
+	free(ptr_prev);
+	void* ptr_after = realloc(ptr_before, size_after);
+
+	assert_ok(ptr_before != ptr_after, "Punteros no son los mismos");
+
+	assert_ok(stats.requested_amnt == MIN_REGION_LEN * 4, "Cantidad pedida es correcta");
+
+	assert_ok(stats.curr_regions == 3, "Cantidad de regiones es correcta");
+
+	assert_ok(stats.coalesced_amnt == 1, "Cantidad de coalesce es correcta");
+
+	assert_ok(stats.realloc_optimized == 1, "Realloc es con optimizacion");
+
+	assert_ok(rev(ptr_after,MIN_REGION_LEN), "Data es correcta");
+
+	free(ptr_after);
+	free(ptr_next);
+}
+
+void
+test_realloc_more_mmy_prev_next_free()
+{
+	YELLOW("REALLOC WITH PREV AND NEXT FREE SIZE ENOUGH")
+	int size_before = MIN_REGION_LEN;
+	int size_after = MIN_REGION_LEN * 3;
+	char* ptr_prev = malloc(size_before);
+	char* ptr_before = malloc(size_before);
+	char* ptr_next = malloc(size_before);
+	char* ptr_nnext = malloc(size_before);
+
+	cpy(ptr_before, MIN_REGION_LEN);
+
+	free(ptr_prev);
+	free(ptr_next);
+	void* ptr_after = realloc(ptr_before, size_after);
+
+	assert_ok(ptr_before != ptr_after, "Punteros no son los mismos");
+
+	assert_ok(stats.requested_amnt == MIN_REGION_LEN * 6, "Cantidad pedida es correcta");
+	
+	assert_ok(stats.curr_regions == 3, "Cantidad de regiones es correcta");
+
+	assert_ok(stats.coalesced_amnt == 2, "Cantidad de coalesce es correcta");
+
+	assert_ok(stats.realloc_optimized == 1, "Realloc es con optimizacion");
+
+	assert_ok(rev(ptr_after,MIN_REGION_LEN), "Data es correcta");
+
+	free(ptr_after);
+	free(ptr_nnext);
+}
+
+void
+test_realloc_more_mmy_new_malloc()
+{
+	YELLOW("REALLOC CALLS MALLOC");
+	int size_before = MIN_REGION_LEN;
+	int size_after = MIN_REGION_LEN * 3;
+	char* ptr_prev = malloc(size_before);
+	char* ptr_before = malloc(size_before);
+	char* ptr_next = malloc(size_before);
+
+	cpy(ptr_before, MIN_REGION_LEN);
+
+	void* ptr_after = realloc(ptr_before, size_after);
+
+	assert_ok(ptr_before != ptr_after, "Punteros no son los mismos");
+
+	assert_ok(stats.malloc_calls == 4, "Cantidad de llamados a malloc es correcta");
+
+	assert_ok(stats.free_calls == 1, "Cantidad de llamadas a free es correcta");
+
+	assert_ok(stats.freed_amnt == MIN_REGION_LEN, "Cantidad de memoria liberada es correcta");
+	
+	assert_ok(stats.curr_regions == 5, "Cantidad de regiones es correcta");
+
+	assert_ok(stats.coalesced_amnt == 0, "Cantidad de coalesce es correcta");
+
+	assert_ok(stats.realloc_no_optimized == 1, "Realloc es sin optimizacion");
+
+	assert_ok(rev(ptr_after,MIN_REGION_LEN), "Data es correcta");
+
+	free(ptr_prev);
+	free(ptr_next);
+	free(ptr_after);
+}
+
 
 void
 test_realloc()
@@ -438,17 +680,29 @@ test_realloc()
 	RUN_TEST(test_realloc_with_size_zero_frees_the_poninter_ok)
 	CLEAN_STATS
 
-	// RUN_TEST(test_realloc_with_null_pointer_and_size_zero_returns_null_ok)
-	// CLEAN_STATS
+	RUN_TEST(test_realloc_with_size_zero_pointer_null)
+	CLEAN_STATS
 
-	// RUN_TEST(test_realloc_of_larger_size_than_prev_mem_is_handled_ok)
-	// CLEAN_STATS
+	RUN_TEST(test_realloc_less_mmy)
+	CLEAN_STATS
 
-	// RUN_TEST(test_realloc_of_smaller_size_than_prev_mem_is_handled_ok)
-	// CLEAN_STATS
+	RUN_TEST(test_realloc_less_mmy_next_ocuppied_can_split)
+	CLEAN_STATS
 
-	// RUN_TEST(test_realloc_of_equal_size_as_prev_mem_returns_the_same_ptr_ok)
-	// CLEAN_STATS
+	RUN_TEST(test_realloc_less_mmy_next_ocuppied_can_not_split)
+	CLEAN_STATS
+
+	RUN_TEST(test_realloc_more_mmy_next_free)
+	CLEAN_STATS
+
+	RUN_TEST(test_realloc_more_mmy_prev_free)
+	CLEAN_STATS
+
+	RUN_TEST(test_realloc_more_mmy_prev_next_free)
+	CLEAN_STATS
+
+	RUN_TEST(test_realloc_more_mmy_new_malloc)
+	CLEAN_STATS
 }
 
 
@@ -547,19 +801,66 @@ test_free()
 
 // ======================== BEST FIT STRAT ======================== //
 
+
+void
+test_best_fit_works()
+{
+	YELLOW("TEST BEST FIT")
+	size_t size = MIN_REGION_LEN*2;
+	void *ptr1 = malloc(size);
+	void *ptr2 = malloc(size*2);
+	void *ptr3 = malloc(size);
+	void *ptr4 = malloc(size);
+	void *ptr5 = malloc(size);
+	void *ptr6 = malloc(size);
+	free(ptr2);
+	free(ptr4);
+	void *ptr7 = malloc(size);
+	assert_ok(ptr7 == ptr4, "Punteros son iguales");
+	free(ptr1);
+	free(ptr3);
+	free(ptr5);
+	free(ptr6);
+	free(ptr7);
+}
+
 void
 test_best_fit()
 {
-	YELLOW("TO BE IMPLEMENTED");
+	RUN_TEST(test_best_fit_works)
+	CLEAN_STATS
 }
 
 
 // ======================== FIRST FIT STRAT ======================== //
 
 void
+test_first_fit_works()
+{
+	YELLOW("TEST BEST FIT")
+	size_t size = MIN_REGION_LEN*2;
+	void *ptr1 = malloc(size);
+	void *ptr2 = malloc(size*2);
+	void *ptr3 = malloc(size);
+	void *ptr4 = malloc(size);
+	void *ptr5 = malloc(size);
+	void *ptr6 = malloc(size);
+	free(ptr2);
+	free(ptr4);
+	void *ptr7 = malloc(size);
+	assert_ok(ptr7 == ptr2, "Punteros son iguales");
+	free(ptr1);
+	free(ptr3);
+	free(ptr5);
+	free(ptr6);
+	free(ptr7);
+}
+
+void
 test_first_fit()
 {
-	YELLOW("TO BE IMPLEMENTED");
+	RUN_TEST(test_first_fit_works)
+	CLEAN_STATS
 }
 
 

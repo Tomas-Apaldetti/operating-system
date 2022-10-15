@@ -3,6 +3,8 @@
 
 stats_t stats = { .malloc_calls = 0,
 	          .free_calls = 0,
+			  .calloc_calls = 0,
+			  .realloc_calls = 0,
 	          .requested_amnt = 0,
 	          .mapped_amnt = 0,
 	          .given_amnt = 0,
@@ -21,6 +23,8 @@ reset_stats()
 {
 	stats.malloc_calls = 0;
 	stats.free_calls = 0;
+	stats.calloc_calls = 0;
+	stats.realloc_calls = 0;
 	stats.requested_amnt = 0;
 	stats.mapped_amnt = 0;
 	stats.given_amnt = 0;
