@@ -16,7 +16,9 @@
 #ifdef USE_STATS
 #include "statistics.h"
 extern stats_t stats;
-#define INCREASE_STATS(stat_name, amnt) if((int) (amnt) > 0) stats.stat_name += amnt
+#define INCREASE_STATS(stat_name, amnt)                                        \
+	if ((int) (amnt) > 0)                                                  \
+	stats.stat_name += amnt
 #define DECREASE_STATS(stat_name, amnt) (stats.stat_name -= amnt)
 #else
 #define INCREASE_STATS(stat_name, amnt)
@@ -32,7 +34,7 @@ extern stats_t stats;
 #define BLOCK2REGION(ptr) ((region_header_t *) (ptr + 1))
 
 #define SPLITREGION(ptr, size)                                                 \
-	(region_header_t *) ((byte) REGION2PTR(ptr) + size)
+	(region_header_t *) ((byte *) REGION2PTR(ptr) + size)
 
 #define KiB 1024
 #define MiB (1024 * KiB)
@@ -44,13 +46,13 @@ extern stats_t stats;
 #define BLOCK_MD (1 * MiB)
 #define BLOCK_LG (32 * MiB)
 
-#define HARD_LIMIT ( 10 * BLOCK_LG )
+#define HARD_LIMIT (10 * BLOCK_LG)
 
 #define EXIT_OK 0
 #define EXIT_ERROR -1
 #define INVALID_POINTER 134
 
-typedef char *byte;
+typedef char byte;
 
 typedef struct block_header {
 	int size;
@@ -205,7 +207,7 @@ new_block(size_t size)
 	if (new_block_size == EXIT_ERROR)
 		return NULL;
 
-	if(total_mmy + new_block_size >= HARD_LIMIT){
+	if (total_mmy + new_block_size >= HARD_LIMIT) {
 		errno = ENOMEM;
 		return NULL;
 	}
@@ -226,7 +228,7 @@ new_block(size_t size)
 	INCREASE_STATS(mapped_amnt, new_block_size);
 	INCREASE_STATS(total_blocks, 1);
 	INCREASE_STATS(curr_blocks, 1);
-	
+
 	new_block_header->size = new_block_size;
 	append_block(new_block_header);
 
@@ -288,7 +290,6 @@ split_region(region_header_t *region, size_t size)
 
 	INCREASE_STATS(splitted_amnt, 1);
 	INCREASE_STATS(curr_regions, 1);
-	
 }
 
 /// @brief Realiza un split en una determinada region.
@@ -297,15 +298,14 @@ split_region(region_header_t *region, size_t size)
 void
 try_split_region(region_header_t *region, size_t size)
 {
-	
 	size_t required_size_to_split;
 
 	required_size_to_split = size + sizeof(region_header_t) + MIN_REGION_LEN;
-	if (region->size < required_size_to_split){
+	if (region->size < required_size_to_split) {
 		INCREASE_STATS(given_amnt, region->size);
-		return;	
+		return;
 	}
-		
+
 
 	split_region(region, size);
 	INCREASE_STATS(given_amnt, region->size);
@@ -392,17 +392,17 @@ are_all_block_free(region_header_t *region)
 }
 
 bool
-is_ptr_into_blocks(byte ptr)
+is_ptr_into_blocks(byte *ptr)
 {
 	block_header_t *curr_block_header = block_header_list;
-	byte first_dir;
-	byte last_dir;
+	byte *first_dir;
+	byte *last_dir;
 
 	if (!curr_block_header)
 		return false;
 
 	while (curr_block_header) {
-		first_dir = (byte) REGION2PTR(BLOCK2REGION(curr_block_header));
+		first_dir = (byte *) REGION2PTR(BLOCK2REGION(curr_block_header));
 		last_dir = first_dir + curr_block_header->size -
 		           sizeof(region_header_t);
 
@@ -420,7 +420,7 @@ is_ptr_into_blocks(byte ptr)
 /// @param ptr
 /// @return
 int
-is_valid_ptr(byte ptr)
+is_valid_ptr(byte *ptr)
 {
 	region_header_t *region;
 
@@ -448,12 +448,11 @@ is_valid_ptr(byte ptr)
 /// @param c Valor al que sera seteada la memoria
 /// @param n Cantidad de bytes a setear
 void
-set_mem(void *ptr, size_t c, size_t n)
+set_mem(void *ptr, char c, size_t n)
 {
-	size_t limit = n / sizeof(size_t);
-	size_t *bptr = (size_t *) ptr;
+	byte *bptr = (byte *) ptr;
 
-	for (size_t i = 0; i < limit; i++)
+	for (size_t i = 0; i < n; i++)
 		bptr[i] = c;
 }
 
@@ -465,8 +464,8 @@ set_mem(void *ptr, size_t c, size_t n)
 void
 move_data(void *_dest, void *_src, int n)
 {
-	byte dest = (byte) _dest;
-	byte src = (byte) _src;
+	byte *dest = (byte *) _dest;
+	byte *src = (byte *) _src;
 
 	for (int i = 0; i < n; i++) {
 		dest[i] = src[i];
@@ -681,8 +680,7 @@ calloc(size_t nmemb, size_t size)
 	if (!ptr)
 		return NULL;
 
-	set_mem(ptr, 0llu, PTR2REGION(ptr)->size);
-	void *p = ((byte) ptr) + PTR2REGION(ptr)->size;
+	set_mem(ptr, 0, PTR2REGION(ptr)->size);
 	return ptr;
 }
 
@@ -690,7 +688,7 @@ void *
 realloc(void *ptr, size_t size)
 {
 	INCREASE_STATS(realloc_calls, 1);
-	
+
 	if (!ptr)
 		return malloc(size);
 
@@ -698,14 +696,14 @@ realloc(void *ptr, size_t size)
 		free(ptr);
 		return NULL;
 	}
-	
-	if (!is_valid_ptr((byte) ptr)) {
+
+	if (!is_valid_ptr((byte *) ptr)) {
 		exit(INVALID_POINTER);
 	}
 
-	region_header_t* region = PTR2REGION(ptr);
+	region_header_t *region = PTR2REGION(ptr);
 
-	INCREASE_STATS(requested_amnt,size - region->size);
+	INCREASE_STATS(requested_amnt, size - region->size);
 
 	size = ALIGN4(size);
 	if (size + sizeof(region_header_t) > BLOCK_LG) {
@@ -728,7 +726,7 @@ free(void *ptr)
 
 	region_header_t *region_to_free;
 
-	if (!is_valid_ptr((byte) ptr)) {
+	if (!is_valid_ptr((byte *) ptr)) {
 		exit(INVALID_POINTER);
 	}
 
