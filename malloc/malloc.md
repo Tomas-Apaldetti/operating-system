@@ -31,7 +31,7 @@ Siguiendo con la misma metodología que se implementó para las regiones, en don
 
 Para poder ejemplificar las estructuras utilizadas, a continuación se visualizará un diagrama con un ejemplo de las mismas:
 
-![](/Img/Estructura.png)
+![](Img/Estructura.png)
 
 Como podemos ver, la información del bloque se encuentra previa al header de la primera región. A su vez, toda la información de la región también era contenida previa a memoria que se brindaba al usuario. 
 
@@ -45,7 +45,7 @@ Como se comentó en la explicación de las regiones, todo comenzó con un único
 
 El *split* de regiones se realizó de una manera muy sencilla y se intenta ejecutar todas las veces que fuera posible (se implementa en las funciones malloc, calloc y realloc, para evitar lo más posible la fragmentación interna). A modo de ejemplificación se citará un gráfico para poder explicar en qué casos es posible realizar el split de una región:
 
-![](/Img/Split.png)
+![](Img/Split.png)
 
 En el gráfico se observa una posible región a realizarle *split*.
 
