@@ -9,7 +9,9 @@
 
 #include "statistics.h"
 
+#ifndef USE_STATS
 #define USE_STATS
+#endif
 
 #define KiB 1024
 #define MiB (1024 * KiB)
@@ -55,6 +57,14 @@ assert_ok(bool ok, char *desc)
 		RED(desc)
 }
 
+
+void test_malloc();
+void test_calloc();
+void test_realloc();
+void test_free();
+void test_best_fit();
+void test_first_fit();
+
 void test_malloc_with_size_zero_ok();
 void test_malloc_with_size_smaller_than_min_region_len_ok();
 void test_malloc_with_size_between_min_region_len_and_the_size_of_small_block_ok();
@@ -69,15 +79,20 @@ void test_calloc();
 void test_realloc_with_null_pointer_behaves_as_malloc_ok();
 void test_realloc_with_size_zero_frees_the_poninter_ok();
 void test_realloc_with_size_zero_pointer_null();
-void test_realloc_less_mmy();
-void test_realloc_less_mmy_next_ocuppied_can_split();
-void test_realloc_less_mmy_next_ocuppied_can_not_split();
-void test_realloc_more_mmy_next_free();
-void test_realloc_more_mmy_prev_free();
-void test_realloc_more_mmy_prev_next_free();
-void test_realloc_more_mmy_new_malloc();
+void test_realloc_that_requires_less_memory();
+void
+test_realloc_that_requires_less_memory_and_can_stay_and_split_inplace_even_with_next_region_being_ocuppied();
+void
+test_realloc_that_requires_less_memory_and_can_stay_inplace_but_cannot_split_due_to_next_region_being_ocuppied_and_lack_of_space();
+void test_realloc_that_requires_more_memory_and_next_region_is_free_and_enough();
+void
+test_realloc_that_requires_more_memory_and_both_prev_and_next_regions_are_free_and_enough();
+void
+test_realloc_that_requires_more_memory_and_a_new_malloc_due_to_both_prev_and_next_regions_being_occupied();
+void
+test_realloc_that_requires_more_memory_and_a_new_malloc_due_to_both_prev_and_next_regions_being_free_but_with_lack_of_space();
 void test_realloc();
-void test_return_mmy_to_OS();
+void test_free_returns_memory_to_OS();
 void test_coalesce_first_middle();
 void test_coalesce_last_middle();
 void test_free();
@@ -520,7 +535,7 @@ test_calloc()
 void
 test_realloc_with_null_pointer_behaves_as_malloc_ok()
 {
-	YELLOW("LLAMADA A REALLOC CON NULL Y TAMAÑO > 0");
+	YELLOW("LLAMADA A REALLOC CON NULL Y SIZE > 0");
 
 	size_t size = 10;
 	char *ptr = realloc(NULL, size);
@@ -533,14 +548,16 @@ test_realloc_with_null_pointer_behaves_as_malloc_ok()
 	          "La cantidad de memoria pedida es correcta");
 	assert_ok(stats.given_amnt == MIN_REGION_LEN,
 	          "La cantidad de memoria dada al usuario es correcta");
-	assert_ok(stats.mapped_amnt == BLOCK_SM, "La cantidad de memoria utilizada del heap es de un bloque pequeño");
 
 	assert_ok(stats.splitted_amnt == 1,
 	          "La cantidad de splits realizados es uno");
+
 	assert_ok(stats.curr_regions == 2,
 	          "La cantidad de regiones actuales es dos");
+
 	assert_ok(stats.curr_blocks == 1,
 	          "La cantidad de bloques actuales es uno");
+
 	assert_ok(stats.total_blocks == 1,
 	          "La cantidad de total de bloques es uno");
 
@@ -550,155 +567,186 @@ test_realloc_with_null_pointer_behaves_as_malloc_ok()
 void
 test_realloc_with_size_zero_frees_the_poninter_ok()
 {
-	YELLOW("LLAMADA A REALLOC CON TAMAÑO CERO (PTR NO NULL)");
+	YELLOW("LLAMADA A REALLOC CON PTR NO NULL Y  SIZE = 0");
 
 	size_t size = 10;
 	char *ptr = malloc(size);
-
 	char *aux = realloc(ptr, 0);
 
 	assert_ok(ptr != NULL, "Cuando se realiza realloc con ptr no NULL y de un size nulo, se devuelve NULL");
 
 	assert_ok(stats.malloc_calls == 1, "La cantidad de llamadas a malloc se mantiene constante tras hacer el realloc");
 
-	assert_ok(
-	        stats.free_calls == 1,
-	        "La cantidad de llamadas a free es uno tras hacer el realloc");
+	assert_ok(stats.free_calls == 1, "La cantidad de llamadas a free es uno tras hacer el realloc (por el size nulo)");
+
+	assert_ok(stats.curr_regions == 0,
+	          "La cantidad de regiones actuales es cero");
 
 	assert_ok(stats.curr_blocks == 0,
 	          "La cantidad de bloques actuales es cero");
-
-	assert_ok(stats.total_blocks == 1,
-	          "La cantidad de total de bloques es uno");
 }
 
 void
 test_realloc_with_size_zero_pointer_null()
 {
-	YELLOW("LLAMADA A REALLOC CON NULL Y TAMAÑO = 0");
+	YELLOW("LLAMADA A REALLOC CON PTR NULL Y SIZE = 0");
 
 	size_t size = 0;
 	char *ptr = realloc(NULL, size);
 
-	assert_ok(!ptr, "Realloc pointer NULL, size 0, devuelve NULL");
+	assert_ok(!ptr, "Cuando se realiza realloc con ptr NULL y de un size nulo, se devuelve NULL");
 
-	assert_ok(stats.malloc_calls == 1, "Cantidad de malloc calls es correcta");
+	assert_ok(stats.malloc_calls == 1, "La cantidad de llamadas a malloc se mantiene constante tras hacer el realloc");
 
 	assert_ok(stats.requested_amnt == 0,
-	          "La cantidad de memoria pedida es correcta");
+	          "La cantidad de memoria pedida es cero");
+
 	assert_ok(stats.given_amnt == 0,
-	          "La cantidad de memoria dada al usuario es correcta");
+	          "La cantidad de memoria dada al usuario es cero");
+
+	assert_ok(stats.curr_regions == 0,
+	          "La cantidad de regiones actuales se mantiene en cero");
+
+	assert_ok(stats.curr_blocks == 0,
+	          "La cantidad de bloques actuales se mantiene en cero");
 }
 
 void
-test_realloc_less_mmy()
+test_realloc_that_requires_less_memory()
 {
-	YELLOW("REALLOC WITH LESS MEMORY THAN ORIGINAL")
+	YELLOW("LLAMADA A REALLOC CON MENOS MEMORIA REQUERIDA QUE ANTES "
+	       "(REGION UNICA)")
 	int size_before = MIN_REGION_LEN * 2;
 	int size_after = MIN_REGION_LEN;
 	void *ptr_before = malloc(size_before);
 	void *ptr_after = realloc(ptr_before, size_after);
 
-	assert_ok(ptr_after, "Puntero no es NULL");
-	assert_ok(ptr_after == ptr_before, "Puntero es lo mismo");
+	assert_ok(ptr_after, "Cuando se realiza el realloc, el ptr no es NULL");
 
-	assert_ok(stats.malloc_calls == 1, "Solo una llamada a malloc");
+	assert_ok(ptr_after == ptr_before, "El puntero apunta a la misma direccion inicial en la region retornada");
+
+	assert_ok(stats.malloc_calls == 1, "La cantidad de llamadas a malloc se mantiene constante tras hacer el realloc");
 
 	assert_ok(stats.requested_amnt == size_before,
 	          "La cantidad de memoria pedida es correcta");
 
 	assert_ok(stats.given_amnt == size_before,
 	          "La cantidad de memoria dada al usuario es correcta");
+
 	assert_ok(stats.splitted_amnt == 2,
 	          "La cantidad de splits realizados es dos");
+
 	assert_ok(stats.curr_regions == 2,
 	          "La cantidad de regiones actuales es dos");
-	assert_ok(stats.coalesced_amnt == 1, "La cantidad de coalesce es uno");
+
+	assert_ok(stats.coalesced_amnt == 1,
+	          "La cantidad de coalesces realizados es uno (debido al nuevo "
+	          "split, para mantener la region next)");
 
 	free(ptr_after);
 }
 
 void
-test_realloc_less_mmy_next_ocuppied_can_split()
+test_realloc_that_requires_less_memory_and_can_stay_and_split_inplace_even_with_next_region_being_ocuppied()
 {
-	YELLOW("REALLOC WITH LESS MEMORY THAN ORIGINAL NEXT IS "
-	       "OCCUPPIED CAN "
-	       "SPLIT")
+	YELLOW("LLAMADA A REALLOC CON MENOS MEMORIA REQUERIDA QUE ANTES "
+	       "(REGIONES MULTIPLES, DEBERIA MANTENER MISMO COMPORTAMIENTO)")
 	int size_before = MIN_REGION_LEN * 3;
 	int size_after = MIN_REGION_LEN;
 	void *ptr_before = malloc(size_before);
 	void *ptr_next = malloc(size_before);
 	void *ptr_after = realloc(ptr_before, size_after);
 
-	assert_ok(ptr_after, "Puntero no es NULL");
-	assert_ok(ptr_after == ptr_before, "Puntero es lo mismo");
+	assert_ok(ptr_after, "Cuando se realiza el realloc, el ptr no es NULL");
 
-	assert_ok(stats.malloc_calls == 2, "Solo una llamada a malloc");
+	assert_ok(ptr_after == ptr_before, "El puntero apunta a la misma direccion inicial en la region retornada");
+
+	assert_ok(stats.malloc_calls == 2, "La cantidad de llamadas a malloc se mantiene constante tras hacer el realloc");
 
 	assert_ok(stats.requested_amnt == size_before * 2,
 	          "La cantidad de memoria pedida es correcta");
+
 	assert_ok(stats.splitted_amnt == 3,
 	          "La cantidad de splits realizados es tres");
+
 	assert_ok(stats.curr_regions == 4,
 	          "La cantidad de regiones actuales es cuatro");
-	assert_ok(stats.coalesced_amnt == 0, "La cantidad de coalesce es cero");
+	// Regiones:  | ocupada tras realloc | libre por split | ocupada por 2do malloc | libre ...|
+
+	assert_ok(stats.coalesced_amnt == 0,
+	          "La cantidad de coalesces realizados es cero (a pesar de "
+	          "tener nuevo split, ya que region next estaba ocupada)");
 
 	free(ptr_after);
 	free(ptr_next);
 }
 
 void
-test_realloc_less_mmy_next_ocuppied_can_not_split()
+test_realloc_that_requires_less_memory_and_can_stay_inplace_but_cannot_split_due_to_next_region_being_ocuppied_and_lack_of_space()
 {
-	YELLOW("REALLOC WITH LESS MEMORY THAN ORIGINAL NEXT IS "
-	       "OCCUPPIED CAN "
-	       "NOT "
-	       "SPLIT")
+	YELLOW("LLAMADA A REALLOC CON MENOS MEMORIA REQUERIDA QUE ANTES "
+	       "(REGIONES MULTIPLES, PERO SIN SPLIT ADICIONAL)")
 	int size_before = MIN_REGION_LEN * 2;
-	int size_after = MIN_REGION_LEN;
+	int size_after =
+	        MIN_REGION_LEN;  // Pidiendo esta cantidad no se tiene suficiente
+	                         // para splittear ya que no sobraría para otra region + su header.
 	void *ptr_before = malloc(size_before);
 	void *ptr_next = malloc(size_before);
 	void *ptr_after = realloc(ptr_before, size_after);
 
-	assert_ok(ptr_after, "Puntero no es NULL");
-	assert_ok(ptr_after == ptr_before, "Puntero es lo mismo");
+	assert_ok(ptr_after, "Cuando se realiza el realloc, el ptr no es NULL");
 
-	assert_ok(stats.malloc_calls == 2, "Solo una llamada a malloc");
+	assert_ok(ptr_after == ptr_before, "El puntero apunta a la misma direccion inicial en la region retornada");
+
+	assert_ok(stats.malloc_calls == 2, "La cantidad de llamadas a malloc se mantiene constante tras hacer el realloc");
 
 	assert_ok(stats.requested_amnt == size_before * 2,
 	          "La cantidad de memoria pedida es correcta");
+
 	assert_ok(stats.splitted_amnt == 2,
 	          "La cantidad de splits realizados es dos");
+
 	assert_ok(stats.curr_regions == 3,
-	          "La cantidad de regiones actuales es dos");
-	assert_ok(stats.coalesced_amnt == 0, "La cantidad de coalesce es cero");
+	          "La cantidad de regiones actuales es tres");
+	// Regiones:  | ocupada tras realloc | ocupada por 2do malloc | libre ...|
+
+	assert_ok(stats.coalesced_amnt == 0,
+	          "La cantidad de coalesces realizados es cero");
 
 	free(ptr_after);
 	free(ptr_next);
 }
 
 void
-test_realloc_more_mmy_next_free()
+test_realloc_that_requires_more_memory_and_next_region_is_free_and_enough()
 {
-	YELLOW("REALLOC WITH NEXT FREE SIZE ENOUGH")
+	YELLOW("LLAMADA A REALLOC CON MAS MEMORIA REQUERIDA QUE ANTES (REGION "
+	       "ADYACENTE A LA DERECHA LIBRE Y SUFICIENTE)")
 	int size_before = MIN_REGION_LEN;
 	int size_after = MIN_REGION_LEN * 2;
 	void *ptr_before = malloc(size_before);
 	void *ptr_after = realloc(ptr_before, size_after);
 
-	assert_ok(ptr_before == ptr_after, "Punteros son los mismos");
+	assert_ok(ptr_after, "Cuando se realiza el realloc, el ptr no es NULL");
+
+	assert_ok(ptr_before == ptr_after, "El puntero apunta a la misma direccion inicial en la region retornada");
 
 	assert_ok(stats.requested_amnt == size_after,
-	          "Cantidad pedida es correcta");
+	          "La cantidad de memoria pedida es correcta");
 
-	assert_ok(stats.curr_regions == 2, "Cantidad de regiones es correcta");
+	assert_ok(stats.curr_regions == 2,
+	          "La cantidad de regiones actuales es dos");
 
-	assert_ok(stats.coalesced_amnt == 1, "Cantidad de coalesce es correcta");
+	assert_ok(stats.coalesced_amnt == 1,
+	          "La cantidad de coalesces realizados es uno");
 
-	assert_ok(stats.realloc_optimized == 1, "Realloc es con optimizacion");
+	assert_ok(stats.realloc_optimized == 1,
+	          "El realloc esta optimizado para no requerir otro malloc");
 
 	free(ptr_after);
 }
+
+// --- Funciones auxiliares para copiado y revision de bytes ---
 
 void
 cpy(char *ptr, char end)
@@ -717,10 +765,13 @@ rev(char *ptr, char end)
 	return true;
 }
 
+// ------
+
 void
-test_realloc_more_mmy_prev_free()
+test_realloc_that_requires_more_memory_and_prev_region_is_free_and_enough()
 {
-	YELLOW("REALLOC WITH PREV FREE SIZE ENOUGH")
+	YELLOW("LLAMADA A REALLOC CON MAS MEMORIA REQUERIDA QUE ANTES (REGION "
+	       "ADYACENTE A LA IZQUIERDA LIBRE Y SUFICIENTE)")
 	int size_before = MIN_REGION_LEN;
 	int size_after = MIN_REGION_LEN * 2;
 	char *ptr_prev = malloc(size_before);
@@ -730,29 +781,36 @@ test_realloc_more_mmy_prev_free()
 	cpy(ptr_before, MIN_REGION_LEN);
 
 	free(ptr_prev);
+
 	void *ptr_after = realloc(ptr_before, size_after);
 
-	assert_ok(ptr_before != ptr_after, "Punteros no son los mismos");
+	assert_ok(ptr_after, "Cuando se realiza el realloc, el ptr no es NULL");
+
+	assert_ok(ptr_before != ptr_after, "El puntero apunta a una direccion inicial distinta en la region retornada");
 
 	assert_ok(stats.requested_amnt == MIN_REGION_LEN * 4,
-	          "Cantidad pedida es correcta");
+	          "La cantidad de memoria pedida es correcta");
 
-	assert_ok(stats.curr_regions == 3, "Cantidad de regiones es correcta");
+	assert_ok(stats.curr_regions == 3, "La cantidad de regiones es tres");
+	// Regiones:  | ocupada tras realloc | ocupada por 3er malloc | libre ... |
 
-	assert_ok(stats.coalesced_amnt == 1, "Cantidad de coalesce es correcta");
+	assert_ok(stats.coalesced_amnt == 1,
+	          "La cantidad de coalesces realizados es uno");
 
-	assert_ok(stats.realloc_optimized == 1, "Realloc es con optimizacion");
+	assert_ok(stats.realloc_optimized == 1,
+	          "El realloc esta optimizado para no requerir otro malloc");
 
-	assert_ok(rev(ptr_after, MIN_REGION_LEN), "Data es correcta");
+	assert_ok(rev(ptr_after, MIN_REGION_LEN), "La data alamacenada tras el realloc en las nuevas direcciones es correcta");
 
 	free(ptr_after);
 	free(ptr_next);
 }
 
 void
-test_realloc_more_mmy_prev_next_free()
+test_realloc_that_requires_more_memory_and_both_prev_and_next_regions_are_free_and_enough()
 {
-	YELLOW("REALLOC WITH PREV AND NEXT FREE SIZE ENOUGH")
+	YELLOW("LLAMADA A REALLOC CON MAS MEMORIA REQUERIDA QUE ANTES (AMBAS "
+	       "REGIONES ADYACENTES LIBRES Y SUFICIENTES)")
 	int size_before = MIN_REGION_LEN;
 	int size_after = MIN_REGION_LEN * 3;
 	char *ptr_prev = malloc(size_before);
@@ -766,27 +824,33 @@ test_realloc_more_mmy_prev_next_free()
 	free(ptr_next);
 	void *ptr_after = realloc(ptr_before, size_after);
 
-	assert_ok(ptr_before != ptr_after, "Punteros no son los mismos");
+	assert_ok(ptr_after, "Cuando se realiza el realloc, el ptr no es NULL");
+
+	assert_ok(ptr_before != ptr_after, "El puntero apunta a una direccion inicial distinta en la region retornada");
 
 	assert_ok(stats.requested_amnt == MIN_REGION_LEN * 6,
-	          "Cantidad pedida es correcta");
+	          "La cantidad de memoria pedida es correcta");
 
-	assert_ok(stats.curr_regions == 3, "Cantidad de regiones es correcta");
+	assert_ok(stats.curr_regions == 3, "La cantidad de regiones es tres");
+	// Regiones:  | ocupada tras realloc | ocupada por 4to malloc | libre ... |
 
-	assert_ok(stats.coalesced_amnt == 2, "Cantidad de coalesce es correcta");
+	assert_ok(stats.coalesced_amnt == 2,
+	          "La cantidad de coalesces realizados es dos");
 
-	assert_ok(stats.realloc_optimized == 1, "Realloc es con optimizacion");
+	assert_ok(stats.realloc_optimized == 1,
+	          "El realloc esta optimizado para no requerir otro malloc");
 
-	assert_ok(rev(ptr_after, MIN_REGION_LEN), "Data es correcta");
+	assert_ok(rev(ptr_after, MIN_REGION_LEN), "La data alamacenada tras el realloc en las nuevas direcciones es correcta");
 
 	free(ptr_after);
 	free(ptr_nnext);
 }
 
 void
-test_realloc_more_mmy_new_malloc()
+test_realloc_that_requires_more_memory_and_a_new_malloc_due_to_both_prev_and_next_regions_being_occupied()
 {
-	YELLOW("REALLOC CALLS MALLOC");
+	YELLOW("LLAMADA A REALLOC CON MAS MEMORIA REQUERIDA QUE ANTES (AMBAS "
+	       "REGIONES ADYACENTES OCUPADAS)");
 	int size_before = MIN_REGION_LEN;
 	int size_after = MIN_REGION_LEN * 3;
 	char *ptr_prev = malloc(size_before);
@@ -797,30 +861,83 @@ test_realloc_more_mmy_new_malloc()
 
 	void *ptr_after = realloc(ptr_before, size_after);
 
-	assert_ok(ptr_before != ptr_after, "Punteros no son los mismos");
+	assert_ok(ptr_after, "Cuando se realiza el realloc, el ptr no es NULL");
+
+	assert_ok(ptr_before != ptr_after, "El puntero apunta a una direccion inicial distinta en la region retornada");
 
 	assert_ok(stats.malloc_calls == 4,
-	          "Cantidad de llamados a malloc es correcta");
+	          "La cantidad de llamados a malloc es cuatro");
 
-	assert_ok(stats.free_calls == 1,
-	          "Cantidad de llamadas a free es correcta");
+	assert_ok(stats.free_calls == 1, "La cantidad de llamadas a free es uno");
 
 	assert_ok(stats.freed_amnt == MIN_REGION_LEN,
-	          "Cantidad de memoria liberada es correcta");
+	          "La cantidad de memoria liberada es correcta");
 
-	assert_ok(stats.curr_regions == 5, "Cantidad de regiones es correcta");
+	assert_ok(stats.curr_regions == 5, "La cantidad de regiones es cinco");
 
-	assert_ok(stats.coalesced_amnt == 0, "Cantidad de coalesce es correcta");
+	assert_ok(stats.coalesced_amnt == 0,
+	          "La cantidad de coalesces realizados es cero");
 
-	assert_ok(stats.realloc_no_optimized == 1, "Realloc es sin optimizacion");
+	assert_ok(stats.realloc_no_optimized == 1,
+	          "El realloc no esta optimizado pues requiere otro malloc");
 
-	assert_ok(rev(ptr_after, MIN_REGION_LEN), "Data es correcta");
+	assert_ok(rev(ptr_after, MIN_REGION_LEN), "La data alamacenada tras el realloc en las nuevas direcciones es correcta");
 
 	free(ptr_prev);
 	free(ptr_next);
 	free(ptr_after);
 }
 
+void
+test_realloc_that_requires_more_memory_and_a_new_malloc_due_to_both_prev_and_next_regions_being_free_but_with_lack_of_space()
+{
+	YELLOW("LLAMADA A REALLOC CON MAS MEMORIA REQUERIDA QUE ANTES (AMBAS "
+	       "REGIONES ADYACENTES LIBRES PERO SIN SUFICIENTE ESPACIO)");
+	int size_before = MIN_REGION_LEN;
+	int size_after = MIN_REGION_LEN * 8;
+	char *ptr_pprev = malloc(size_before);
+	char *ptr_prev = malloc(size_before);
+	char *ptr_before = malloc(size_before);
+	char *ptr_next = malloc(size_before);
+	char *ptr_nnext = malloc(size_before);
+
+	cpy(ptr_before, MIN_REGION_LEN);
+
+	free(ptr_prev);
+	free(ptr_next);
+
+	void *ptr_after = realloc(ptr_before, size_after);
+
+	assert_ok(ptr_after, "Cuando se realiza el realloc, el ptr no es NULL");
+
+	assert_ok(ptr_before != ptr_after, "El puntero apunta a una direccion inicial distinta en la region retornada");
+
+	assert_ok(stats.malloc_calls == 6,
+	          "La cantidad de llamados a malloc es seis");
+
+	assert_ok(stats.free_calls == 3, "La cantidad de llamadas a free es tres");
+
+	assert_ok(stats.freed_amnt == MIN_REGION_LEN * 3,
+	          "La cantidad de memoria liberada es correcta");
+
+	assert_ok(stats.curr_regions == 5, "La cantidad de regiones es cinco");
+	// Regiones:  | ptr_pprev | ... libre (tras dos coalesces por el free) ... | ptr_nnext | ptr_after | libre ... |
+
+	assert_ok(stats.coalesced_amnt == 2,
+	          "La cantidad de coalesces realizados es dos");
+
+	assert_ok(stats.splitted_amnt == 6,
+	          "La cantidad de splits realizados es seis");
+
+	assert_ok(stats.realloc_no_optimized == 1,
+	          "El realloc no esta optimizado pues requiere otro malloc");
+
+	assert_ok(rev(ptr_after, MIN_REGION_LEN), "La data alamacenada tras el realloc en las nuevas direcciones es correcta");
+
+	free(ptr_pprev);
+	free(ptr_nnext);
+	free(ptr_after);
+}
 
 void
 test_realloc()
@@ -829,99 +946,109 @@ test_realloc()
 	RUN_TEST(test_realloc_with_size_zero_frees_the_poninter_ok)
 
 	RUN_TEST(test_realloc_with_size_zero_pointer_null)
-	RUN_TEST(test_realloc_less_mmy)
-	RUN_TEST(test_realloc_less_mmy_next_ocuppied_can_split)
-	RUN_TEST(test_realloc_less_mmy_next_ocuppied_can_not_split)
-	RUN_TEST(test_realloc_more_mmy_next_free)
-	RUN_TEST(test_realloc_more_mmy_prev_free)
-	RUN_TEST(test_realloc_more_mmy_prev_next_free)
-	RUN_TEST(test_realloc_more_mmy_new_malloc)
+	RUN_TEST(test_realloc_that_requires_less_memory)
+	RUN_TEST(test_realloc_that_requires_less_memory_and_can_stay_and_split_inplace_even_with_next_region_being_ocuppied)
+	RUN_TEST(test_realloc_that_requires_less_memory_and_can_stay_inplace_but_cannot_split_due_to_next_region_being_ocuppied_and_lack_of_space)
+	RUN_TEST(test_realloc_that_requires_more_memory_and_next_region_is_free_and_enough)
+	RUN_TEST(test_realloc_that_requires_more_memory_and_prev_region_is_free_and_enough)
+	RUN_TEST(test_realloc_that_requires_more_memory_and_both_prev_and_next_regions_are_free_and_enough)
+	RUN_TEST(test_realloc_that_requires_more_memory_and_a_new_malloc_due_to_both_prev_and_next_regions_being_occupied)
+	RUN_TEST(test_realloc_that_requires_more_memory_and_a_new_malloc_due_to_both_prev_and_next_regions_being_free_but_with_lack_of_space)
 }
 
 
 // ======================== FREE ======================== //
 
 void
-test_return_mmy_to_OS()
+test_free_returns_memory_to_OS()
 {
-	YELLOW("LIBERO BLOQUE Y SE DEVUELVE AL SISTEMA")
+	YELLOW("LLAMADA A FREE LIBERA BLOQUE ENTERO Y SE DEVUELVE AL SISTEMA")
 	char *ptr = malloc(150);
 	free(ptr);
 
-	assert_ok(stats.free_calls == 1, "Cantidad de free calls es correcta");
+	assert_ok(stats.free_calls == 1, "La cantidad de free calls es correcta");
+
 	assert_ok(stats.freed_amnt == ALIGN4(150),
-	          "Cantidad de memoria liberada es correcta");
-	assert_ok(stats.curr_blocks == 0, "No hay bloques actuales");
-	assert_ok(stats.coalesced_amnt == 1, "Se realizo un coalesce");
-	assert_ok(stats.total_blocks == 1,
-	          "Se pidio un bloque antes de liberarlo");
-	assert_ok(stats.returned_blocks == 1, "Se devolvio un bloque");
+	          "La cantidad de memoria liberada es correcta");
+
+	assert_ok(stats.curr_blocks == 0,
+	          "La cantidad de bloques actuales es cero");
+
+	assert_ok(stats.coalesced_amnt == 1,
+	          "La cantidad de coalesces realizados es uno");
+
+	assert_ok(stats.returned_blocks == 1, "Se devolvio un bloque al sistema");
 }
 
 void
 test_coalesce_first_middle()
 {
-	YELLOW("TEST COALESCE FIRST MIDDLE")
+	YELLOW("LLAMADO A FREE REALIZA COALESCE CON REGIONES ADYACENTES (ORDEN "
+	       "DE LIBERACION DE REGIONES: INTERMEDIA --> DERECHA --> "
+	       "IZQUIERDA)")
 	char *ptr1 = malloc(150);
 	char *ptr2 = malloc(150);
 	char *ptr3 = malloc(150);
 
-	YELLOW("Libero el bloque de en medio")
+
 	free(ptr2);
 
-	assert_ok(stats.free_calls == 1, "Cantidad de free calls es 1");
+	assert_ok(stats.free_calls == 1, "La cantidad de free calls es 1");
 	assert_ok(stats.freed_amnt == ALIGN4(150),
-	          "Cantidad de memoria liberada es correcta");
-	assert_ok(stats.coalesced_amnt == 0, "No se realizo coalesce");
+	          "La cantidad de memoria liberada es correcta");
+	assert_ok(stats.coalesced_amnt == 0,
+	          "La cantidad de coalesces realizados es cero\n");
 
-	YELLOW("Libero el bloque de la izquierda")
 	free(ptr3);
-	assert_ok(stats.free_calls == 2, "Cantidad de free calls es 2");
+	assert_ok(stats.free_calls == 2, "La cantidad de free calls es 2");
 	assert_ok(stats.freed_amnt == ALIGN4(150) * 2,
-	          "Cantidad de memoria liberada es correcta");
-	assert_ok(stats.coalesced_amnt == 2, "Se realizo dos coalesce");
+	          "La cantidad de memoria liberada es correcta");
+	assert_ok(stats.coalesced_amnt == 2,
+	          "La cantidad de coalesces realizados es dos");
 	assert_ok(stats.curr_regions == 2,
-	          "La cantidad de regiones es correcta luego del coalesce");
+	          "La cantidad de regiones es correcta luego del coalesce\n");
 
-	YELLOW("Libero el bloque de la derecha")
 	free(ptr1);
-	assert_ok(stats.free_calls == 3, "Cantidad de free calls es 3");
+	assert_ok(stats.free_calls == 3, "La cantidad de free calls es 3");
 	assert_ok(stats.freed_amnt == ALIGN4(150) * 3,
-	          "Cantidad de memoria liberada es correcta");
-	assert_ok(stats.coalesced_amnt == 3, "Se realizo tres coalesce");
+	          "La cantidad de memoria liberada es correcta");
+	assert_ok(stats.coalesced_amnt == 3,
+	          "La cantidad de coalesces realizados es tres");
 }
 
 void
 test_coalesce_last_middle()
 {
-	YELLOW("TEST COALESCE LAST MIDDLE")
+	YELLOW("LLAMADO A FREE REALIZA COALESCE CON REGIONES ADYACENTES (ORDEN "
+	       "DE LIBERACION DE REGIONES: IZQUIERDA --> DERECHA --> "
+	       "INTERMEDIA)")
 	char *ptr1 = malloc(150);
 	char *ptr2 = malloc(150);
 	char *ptr3 = malloc(150);
 
-	YELLOW("Libero los bloques adyacentes")
 	free(ptr1);
 	free(ptr3);
 
-	assert_ok(stats.free_calls == 2, "Cantidad de free calls es 2");
+	assert_ok(stats.free_calls == 2, "La cantidad de free calls es 2");
 	assert_ok(stats.freed_amnt == ALIGN4(150) * 2,
-	          "Cantidad de memoria liberada es correcta");
-	assert_ok(stats.coalesced_amnt == 1, "Se realizo un coalesce");
+	          "La cantidad de memoria liberada es correcta");
+	assert_ok(stats.coalesced_amnt == 1,
+	          "La cantidad de coalesces realizados es uno");
 	assert_ok(stats.curr_regions == 3,
-	          "La cantidad de regiones es correcta luego del coalesce");
+	          "La cantidad de regiones es correcta luego del coalesce\n");
 
-	YELLOW("Libero bloque del medio")
 	free(ptr2);
-	assert_ok(stats.free_calls == 3, "Cantidad de free calls es 2");
+	assert_ok(stats.free_calls == 3, "La cantidad de free calls es 2");
 	assert_ok(stats.freed_amnt == ALIGN4(150) * 3,
-	          "Cantidad de memoria liberada es correcta");
-	assert_ok(stats.coalesced_amnt == 3, "Se realizo un coalesce");
+	          "La cantidad de memoria liberada es correcta");
+	assert_ok(stats.coalesced_amnt == 3,
+	          "La cantidad de coalesces realizados es uno");
 }
 
 void
 test_free()
 {
-	RUN_TEST(test_return_mmy_to_OS)
+	RUN_TEST(test_free_returns_memory_to_OS)
 
 
 	RUN_TEST(test_coalesce_first_middle)
@@ -968,7 +1095,7 @@ test_best_fit()
 void
 test_first_fit_works()
 {
-	YELLOW("TEST BEST FIT")
+	YELLOW("TEST FIRST FIT")
 	size_t size = MIN_REGION_LEN * 2;
 	void *ptr1 = malloc(size);
 	void *ptr2 = malloc(size * 2);
@@ -999,13 +1126,17 @@ test_first_fit()
 int
 main(void)
 {
-	//	test_malloc();
+#ifndef USE_STATS
+	printfmt("No se pueden ejecutar los tests sin definir USE_STATS");
+	return 0;
+#endif
+	test_malloc();
 
-	// test_calloc();
+	test_calloc();
 
 	test_realloc();
 
-	// test_free();
+	test_free();
 
 #ifdef BEST_FIT
 	test_best_fit();

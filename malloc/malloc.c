@@ -73,6 +73,81 @@ block_header_t *block_header_list = NULL;
 block_header_t *block_header_tail = NULL;
 size_t total_mmy = 0;
 
+// ======================================================
+
+region_header_t *loop_for_first_fit_region(region_header_t *start_region,
+                                           size_t size);
+
+static region_header_t *find_region_first_fit(size_t size);
+
+region_header_t *loop_for_best_fit_region(region_header_t *start_region,
+                                          size_t size,
+                                          region_header_t *curr_best_region);
+
+region_header_t *find_region_best_fit(size_t size);
+
+static region_header_t *find_free_region(size_t size);
+
+void append_block(block_header_t *new_block);
+
+int get_block_size(size_t size);
+
+block_header_t *new_block(size_t size);
+
+region_header_t *new_region(size_t size);
+
+void split_region(region_header_t *region, size_t size);
+
+void try_split_region(region_header_t *region, size_t size);
+
+region_header_t *coalesce_region_with_its_next(region_header_t *region);
+
+region_header_t *try_coalesce_regions(region_header_t *region);
+
+void return_block_to_OS(block_header_t *block_header);
+
+bool are_all_block_free(region_header_t *region);
+
+bool is_ptr_into_blocks(byte *ptr);
+
+int is_valid_ptr(byte *ptr);
+
+void set_mem(void *ptr, char c, size_t n);
+
+void move_data(void *_dest, void *_src, int n);
+
+void split_and_coalesce_next_regions(region_header_t *region, size_t size);
+
+void *handle_realloc_that_requires_less_memory(region_header_t *region,
+                                               size_t size);
+
+bool is_free(region_header_t *region);
+
+size_t sum_of_regions(region_header_t *region_one,
+                      region_header_t *region_two,
+                      region_header_t *region_three);
+
+
+bool are_free_to_coalesce(region_header_t *region,
+                          size_t size,
+                          region_header_t *region_1,
+                          region_header_t *region_2);
+
+
+void *reallocate_with_next_region(region_header_t *region, size_t size);
+
+void *reallocate_with_prev_region(region_header_t *region, size_t size);
+
+void *reallocate_with_next_and_prev_region(region_header_t *region, size_t size);
+
+void *reallocate_on_new_region(region_header_t *region, size_t size);
+
+void *handle_realloc_that_requires_more_memory(region_header_t *region,
+                                               size_t size);
+
+void *handle_realloc(region_header_t *region, size_t size);
+
+
 region_header_t *
 loop_for_first_fit_region(region_header_t *start_region, size_t size)
 {
@@ -323,7 +398,6 @@ coalesce_region_with_its_next(region_header_t *region)
 {
 	INCREASE_STATS(coalesced_amnt, 1);
 	DECREASE_STATS(curr_regions, 1);
-	block_header_t *block_header = region->block_header;
 	region_header_t *next_region = region->next;
 
 	region->size += next_region->size + sizeof(region_header_t);
@@ -497,7 +571,7 @@ split_and_coalesce_next_regions(region_header_t *region, size_t size)
 }
 
 void *
-handle_realloc_less_memory(region_header_t *region, size_t size)
+handle_realloc_that_requires_less_memory(region_header_t *region, size_t size)
 {
 	INCREASE_STATS(realloc_optimized, 1);
 
@@ -605,16 +679,15 @@ reallocate_on_new_region(region_header_t *region, size_t size)
 }
 
 void *
-handle_realloc_more_memory(region_header_t *region, size_t size)
+handle_realloc_that_requires_more_memory(region_header_t *region, size_t size)
 {
-	if (are_free_to_coalesce(region, size, region->next, NULL))
+	if (are_free_to_coalesce(region, size, region->next, NULL)) {
 		return reallocate_with_next_region(region, size);
-
-	if (are_free_to_coalesce(region, size, region->prev, NULL))
+	} else if (are_free_to_coalesce(region, size, region->prev, NULL)) {
 		return reallocate_with_prev_region(region, size);
-
-	if (are_free_to_coalesce(region, size, region->prev, region->next))
+	} else if (are_free_to_coalesce(region, size, region->prev, region->next)) {
 		return reallocate_with_next_and_prev_region(region, size);
+	}
 
 	return reallocate_on_new_region(region, size);
 }
@@ -627,9 +700,9 @@ handle_realloc(region_header_t *region, size_t size)
 		return REGION2PTR(region);
 
 	if (region->size > size)
-		return handle_realloc_less_memory(region, size);
+		return handle_realloc_that_requires_less_memory(region, size);
 
-	return handle_realloc_more_memory(region, size);
+	return handle_realloc_that_requires_more_memory(region, size);
 }
 
 void *
