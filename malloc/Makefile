@@ -28,10 +28,10 @@ $(EXECS): $(OBJS)
 $(EXECD): $(filter-out malloc.o, $(OBJS))
 	cc $(CFLAGS) -o $@ $^
 
-$(LIBNAME): malloc.c printfmt.o
+$(LIBNAME): malloc.c printfmt.o 
 	cc $(LIBFLAGS) -o $@ $^
 
-run-d: $(EXECD) $(LIBNAME)
+run-d: $(EXECD) $(LIBNAME) 
 	./run-d.sh
 
 run-s: $(EXECS)

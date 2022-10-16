@@ -1,10 +1,12 @@
 #ifdef USE_STATS
 #include "statistics.h"
 
+void reset_stats(void);
+
 stats_t stats = { .malloc_calls = 0,
 	          .free_calls = 0,
-			  .calloc_calls = 0,
-			  .realloc_calls = 0,
+	          .calloc_calls = 0,
+	          .realloc_calls = 0,
 	          .requested_amnt = 0,
 	          .mapped_amnt = 0,
 	          .given_amnt = 0,

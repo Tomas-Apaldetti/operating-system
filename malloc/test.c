@@ -24,9 +24,14 @@
 
 #define MIN_REGION_LEN 64
 
-#define REGION_HEADER_LEN 40
+#define REGION_HEADER_LEN 32
 
 extern stats_t stats;
+int amount_test = 0;
+int amount_fail_test = 0;
+int amount_ok_test = 0;
+
+
 #define CLEAN_STATS                                                            \
 	{                                                                      \
 		YELLOW("")                                                     \
@@ -39,6 +44,7 @@ extern stats_t stats;
 		CLEAN_STATS                                                    \
 	}
 
+
 #define T_RED "\x1b[31m"
 #define T_GREEN "\x1b[32m"
 #define T_YELLOW "\x1b[33m"
@@ -48,61 +54,137 @@ extern stats_t stats;
 #define RED(string) printfmt(T_RED "%s" RESET "\n", string);
 #define YELLOW(string) printfmt(T_YELLOW "%s" RESET "\n", string);
 
+
+//===========================================================//
+//======================== SIGNATURE ========================//
+//===========================================================//
+
+
+//======================== MALLOC ========================//
+
+void test_malloc(void);
+
+void test_malloc_with_size_zero_ok(void);
+void test_malloc_with_size_smaller_than_min_region_len_ok(void);
+void
+test_malloc_with_size_between_min_region_len_and_the_size_of_small_block_ok(void);
+void test_malloc_with_size_close_to_the_size_of_small_block_ok(void);
+void test_malloc_with_size_between_the_size_of_small_block_and_medium_block_ok(void);
+void test_malloc_with_size_between_the_size_of_medium_block_and_large_block_ok(void);
+
+void test_multiple_blocks_ok(void);
+void test_hard_limit_error(void);
+
+//======================== CALLOC ========================//
+
+void test_calloc(void);
+
+void test_calloc_with_size_zero_ok(void);
+void test_calloc_with_nmemb_zero_ok(void);
+void test_calloc_with_overflow_error(void);
+void test_calloc_initilize_with_zeros_ok(void);
+
+//======================== REALLOC ========================//
+
+void test_realloc(void);
+
+void test_realloc_with_null_pointer_behaves_as_malloc_ok(void);
+void test_realloc_with_size_zero_frees_the_poninter_ok(void);
+void test_realloc_with_size_zero_pointer_null(void);
+void test_realloc_that_requires_less_memory(void);
+void test_realloc_that_requires_less_memory_and_can_stay_and_split_inplace_even_with_next_region_being_ocuppied(
+        void);
+void test_realloc_that_requires_less_memory_and_can_stay_inplace_but_cannot_split_due_to_next_region_being_ocuppied_and_lack_of_space(
+        void);
+void test_realloc_that_requires_more_memory_and_next_region_is_free_and_enough(void);
+void test_realloc_that_requires_more_memory_and_prev_region_is_free_and_enough(void);
+void test_realloc_that_requires_more_memory_and_both_prev_and_next_regions_are_free_and_enough(
+        void);
+void test_realloc_that_requires_more_memory_and_a_new_malloc_due_to_both_prev_and_next_regions_being_occupied(
+        void);
+void test_realloc_that_requires_more_memory_and_a_new_malloc_due_to_both_prev_and_next_regions_being_free_but_with_lack_of_space(
+        void);
+
+//======================== FREE ========================//
+
+void test_free(void);
+
+void test_free_returns_memory_to_OS(void);
+void test_coalesce_first_middle(void);
+void test_coalesce_last_middle(void);
+
+//======================== BEST FIT ========================//
+
+void test_best_fit_works(void);
+void test_best_fit(void);
+
+//======================== FIRST FIT ========================//
+
+void test_first_fit_works(void);
+void test_first_fit(void);
+
+//======================== EXTRA ========================//
+
+void assert_ok(bool ok, char *desc);
+void cpy(char *ptr, char end);
+bool rev(char *ptr, char end);
+void resume(void);
+
+
+//===========================================================//
+//======================== FUNCTIONS ========================//
+//===========================================================//
+
+//======================== EXTRA ========================//
+
 void
 assert_ok(bool ok, char *desc)
 {
-	if (ok)
+	amount_test++;
+	if (ok) {
 		GREEN(desc)
-	else
+		amount_ok_test++;
+	} else {
 		RED(desc)
+		amount_fail_test++;
+	}
 }
 
+void
+cpy(char *ptr, char end)
+{
+	char character = 0;
+	for (int i = 0; i < end; i++) {
+		ptr[i] = character;
+		character++;
+	}
+}
 
-void test_malloc();
-void test_calloc();
-void test_realloc();
-void test_free();
-void test_best_fit();
-void test_first_fit();
+bool
+rev(char *ptr, char end)
+{
+	for (int i = 0; i < end; i++)
+		if (ptr[i] != i)
+			return false;
 
-void test_malloc_with_size_zero_ok();
-void test_malloc_with_size_smaller_than_min_region_len_ok();
-void test_malloc_with_size_between_min_region_len_and_the_size_of_small_block_ok();
-void test_malloc_with_size_close_to_the_size_of_small_block_ok();
-void test_malloc_with_size_between_the_size_of_small_block_and_medium_block_ok();
-void test_malloc_with_size_between_the_size_of_medium_block_and_large_block_ok();
-void test_multiple_blocks_ok();
-void test_hard_limit_error();
-void test_malloc();
-void test_calloc_contains_zero();
-void test_calloc();
-void test_realloc_with_null_pointer_behaves_as_malloc_ok();
-void test_realloc_with_size_zero_frees_the_poninter_ok();
-void test_realloc_with_size_zero_pointer_null();
-void test_realloc_that_requires_less_memory();
-void
-test_realloc_that_requires_less_memory_and_can_stay_and_split_inplace_even_with_next_region_being_ocuppied();
-void
-test_realloc_that_requires_less_memory_and_can_stay_inplace_but_cannot_split_due_to_next_region_being_ocuppied_and_lack_of_space();
-void test_realloc_that_requires_more_memory_and_next_region_is_free_and_enough();
-void
-test_realloc_that_requires_more_memory_and_both_prev_and_next_regions_are_free_and_enough();
-void
-test_realloc_that_requires_more_memory_and_a_new_malloc_due_to_both_prev_and_next_regions_being_occupied();
-void
-test_realloc_that_requires_more_memory_and_a_new_malloc_due_to_both_prev_and_next_regions_being_free_but_with_lack_of_space();
-void test_realloc();
-void test_free_returns_memory_to_OS();
-void test_coalesce_first_middle();
-void test_coalesce_last_middle();
-void test_free();
-void test_best_fit_works();
-void test_best_fit();
-void test_first_fit_works();
-void test_first_fit();
+	return true;
+}
 
+void
+resume()
+{
+	printfmt(T_YELLOW "===============================" RESET "\n");
+	printfmt(T_YELLOW "ASSERTS: %i" RESET "\n", amount_test);
 
-// ======================== MALLOC ======================== //
+	if (amount_test == amount_ok_test)
+		printfmt(T_GREEN "TESTS OK" RESET "\n");
+	else
+		printfmt(T_RED "ERRORES: %i" RESET "\n", amount_fail_test);
+
+	printfmt(T_YELLOW "===============================" RESET "\n");
+}
+
+//======================== MALLOC ========================//
 
 void
 test_malloc_with_size_zero_ok()
@@ -210,7 +292,9 @@ test_malloc_with_size_close_to_the_size_of_small_block_ok()
 	          "La cantidad de memoria pedida es correcta");
 	assert_ok(stats.given_amnt == size,
 	          "La cantidad de memoria dada al usuario es correcta");
-	assert_ok(stats.mapped_amnt == BLOCK_SM, "La cantidad de memoria utilizada del heap es de un bloque chico");
+	assert_ok(stats.mapped_amnt == BLOCK_SM,
+	          "La cantidad de memoria utilizada del heap es de un bloque "
+	          "chico");
 
 	assert_ok(stats.splitted_amnt == 0,
 	          "La cantidad de splits realizados es cero");
@@ -393,7 +477,7 @@ test_malloc()
 }
 
 
-// ======================== CALLOC ======================== //
+//======================== CALLOC ========================//
 
 void
 test_calloc_with_size_zero_ok()
@@ -509,7 +593,7 @@ test_calloc_initilize_with_zeros_ok()
 	assert_ok(stats.total_blocks == 1,
 	          "La cantidad de total de bloques es uno");
 
-	for (int i = 0; i < (nmemb * size); i++)
+	for (size_t i = 0; i < (nmemb * size); i++)
 		if (ptr[i] != 0)
 			is_memory_set = false;
 
@@ -530,7 +614,7 @@ test_calloc()
 }
 
 
-// ======================== REALLOC ======================== //
+//======================== REALLOC ========================//
 
 void
 test_realloc_with_null_pointer_behaves_as_malloc_ok()
@@ -573,7 +657,7 @@ test_realloc_with_size_zero_frees_the_poninter_ok()
 	char *ptr = malloc(size);
 	char *aux = realloc(ptr, 0);
 
-	assert_ok(ptr != NULL, "Cuando se realiza realloc con ptr no NULL y de un size nulo, se devuelve NULL");
+	assert_ok(aux == NULL, "Cuando se realiza realloc con ptr no NULL y de un size nulo, se devuelve NULL");
 
 	assert_ok(stats.malloc_calls == 1, "La cantidad de llamadas a malloc se mantiene constante tras hacer el realloc");
 
@@ -616,8 +700,8 @@ test_realloc_that_requires_less_memory()
 {
 	YELLOW("LLAMADA A REALLOC CON MENOS MEMORIA REQUERIDA QUE ANTES "
 	       "(REGION UNICA)")
-	int size_before = MIN_REGION_LEN * 2;
-	int size_after = MIN_REGION_LEN;
+	size_t size_before = MIN_REGION_LEN * 2;
+	size_t size_after = MIN_REGION_LEN;
 	void *ptr_before = malloc(size_before);
 	void *ptr_after = realloc(ptr_before, size_after);
 
@@ -651,8 +735,8 @@ test_realloc_that_requires_less_memory_and_can_stay_and_split_inplace_even_with_
 {
 	YELLOW("LLAMADA A REALLOC CON MENOS MEMORIA REQUERIDA QUE ANTES "
 	       "(REGIONES MULTIPLES, DEBERIA MANTENER MISMO COMPORTAMIENTO)")
-	int size_before = MIN_REGION_LEN * 3;
-	int size_after = MIN_REGION_LEN;
+	size_t size_before = MIN_REGION_LEN * 3;
+	size_t size_after = MIN_REGION_LEN;
 	void *ptr_before = malloc(size_before);
 	void *ptr_next = malloc(size_before);
 	void *ptr_after = realloc(ptr_before, size_after);
@@ -686,8 +770,8 @@ test_realloc_that_requires_less_memory_and_can_stay_inplace_but_cannot_split_due
 {
 	YELLOW("LLAMADA A REALLOC CON MENOS MEMORIA REQUERIDA QUE ANTES "
 	       "(REGIONES MULTIPLES, PERO SIN SPLIT ADICIONAL)")
-	int size_before = MIN_REGION_LEN * 2;
-	int size_after =
+	size_t size_before = MIN_REGION_LEN * 2;
+	size_t size_after =
 	        MIN_REGION_LEN;  // Pidiendo esta cantidad no se tiene suficiente
 	                         // para splittear ya que no sobraría para otra region + su header.
 	void *ptr_before = malloc(size_before);
@@ -722,8 +806,8 @@ test_realloc_that_requires_more_memory_and_next_region_is_free_and_enough()
 {
 	YELLOW("LLAMADA A REALLOC CON MAS MEMORIA REQUERIDA QUE ANTES (REGION "
 	       "ADYACENTE A LA DERECHA LIBRE Y SUFICIENTE)")
-	int size_before = MIN_REGION_LEN;
-	int size_after = MIN_REGION_LEN * 2;
+	size_t size_before = MIN_REGION_LEN;
+	size_t size_after = MIN_REGION_LEN * 2;
 	void *ptr_before = malloc(size_before);
 	void *ptr_after = realloc(ptr_before, size_after);
 
@@ -745,27 +829,6 @@ test_realloc_that_requires_more_memory_and_next_region_is_free_and_enough()
 
 	free(ptr_after);
 }
-
-// --- Funciones auxiliares para copiado y revision de bytes ---
-
-void
-cpy(char *ptr, char end)
-{
-	for (char i = 0; i < end; i++)
-		ptr[i] = i;
-}
-
-bool
-rev(char *ptr, char end)
-{
-	for (char i = 0; i < end; i++)
-		if (ptr[i] != i)
-			return false;
-
-	return true;
-}
-
-// ------
 
 void
 test_realloc_that_requires_more_memory_and_prev_region_is_free_and_enough()
@@ -957,7 +1020,7 @@ test_realloc()
 }
 
 
-// ======================== FREE ======================== //
+//======================== FREE ========================//
 
 void
 test_free_returns_memory_to_OS()
@@ -1050,16 +1113,13 @@ test_free()
 {
 	RUN_TEST(test_free_returns_memory_to_OS)
 
-
 	RUN_TEST(test_coalesce_first_middle)
-
 
 	RUN_TEST(test_coalesce_last_middle)
 }
 
 
-// ======================== BEST FIT STRAT ======================== //
-
+//======================== BEST FIT ========================//
 
 void
 test_best_fit_works()
@@ -1090,7 +1150,7 @@ test_best_fit()
 }
 
 
-// ======================== FIRST FIT STRAT ======================== //
+//======================== FIRST FIT ========================//
 
 void
 test_first_fit_works()
@@ -1121,15 +1181,18 @@ test_first_fit()
 }
 
 
-// ==================================================== //
+//======================================================//
+//======================== MAIN ========================//
+//======================================================//
 
 int
-main(void)
+main()
 {
 #ifndef USE_STATS
 	printfmt("No se pueden ejecutar los tests sin definir USE_STATS");
 	return 0;
 #endif
+
 	test_malloc();
 
 	test_calloc();
@@ -1145,5 +1208,6 @@ main(void)
 	test_first_fit();
 #endif
 
+	resume();
 	return 0;
 }

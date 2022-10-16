@@ -32,6 +32,7 @@ extern stats_t stats;
 #define PTR2REGION(ptr) ((region_header_t *) ptr - 1)
 
 #define BLOCK2REGION(ptr) ((region_header_t *) (ptr + 1))
+#define REGION2BLOCK(ptr) ((block_header_t *) ptr - 1)
 
 #define SPLITREGION(ptr, size)                                                 \
 	(region_header_t *) ((byte *) REGION2PTR(ptr) + size)
@@ -52,16 +53,19 @@ extern stats_t stats;
 #define EXIT_ERROR -1
 #define INVALID_POINTER 134
 
+//=========================================================//
+//======================== STRUCTS ========================//
+//=========================================================//
+
 typedef char byte;
 
 typedef struct block_header {
-	int size;
 	struct block_header *next;
 	struct block_header *prev;
+	int size;
 } block_header_t;
 
 typedef struct region_header {
-	block_header_t *block_header;
 	struct region_header *next;
 	struct region_header *prev;
 	size_t size;
@@ -73,80 +77,215 @@ block_header_t *block_header_list = NULL;
 block_header_t *block_header_tail = NULL;
 size_t total_mmy = 0;
 
-// ======================================================
+//===========================================================//
+//======================== SIGNATURE ========================//
+//===========================================================//
 
+/// @brief Busca una nueva region libre mediante la técnica de First Fit.
+/// @param start_region Región de comienzo.
+/// @param size Tamaño de memoria solicitado por el usuario.
+/// @return Retorna la región encontrada o nulo en caso de que no hayan regiones que se ajusten a lo solicitado.
 region_header_t *loop_for_first_fit_region(region_header_t *start_region,
                                            size_t size);
 
+/// @brief Busca una nueva region libre mediante la técnica de First Fit a lo
+/// largo de todos los bloques.
+/// @param size Tamaño de memoria solicitado por el usuario.
+/// @return Retorna la región encontrada o nulo en caso de que no hayan regiones que se ajusten a lo solicitado.
 static region_header_t *find_region_first_fit(size_t size);
 
+/// @brief Busca una nueva region libre mediante la técnica de Best Fit.
+/// @param start_region Región de comienzo.
+/// @param size Tamaño de memoria solicitado por el usuario.
+/// @param curr_best_region Mejor región actual.
+/// @return Retorna la región encontrada o nulo en caso de que no hayan regiones que se ajusten a lo solicitado.
 region_header_t *loop_for_best_fit_region(region_header_t *start_region,
                                           size_t size,
                                           region_header_t *curr_best_region);
 
+/// @brief Busca una nueva region libre mediante la técnica de Best Fit a lo
+/// largo de todos los bloques.
+/// @param size Tamaño de memoria solicitado por el usuario.
+/// @return Retorna la región encontrada o nulo en caso de que no hayan regiones que se ajusten a lo solicitado.
 region_header_t *find_region_best_fit(size_t size);
 
+
+/// @brief Busca una nueva region libre mediante una determinada técnica de búsqueda.
+/// @param size Tamaño de memoria solicitado por el usuario.
+/// @return Retorna la región encontrada o nulo en caso de que no hayan regiones que se ajusten a lo solicitado.
 static region_header_t *find_free_region(size_t size);
 
+/// @brief Agrega un nuevo bloque a la lista de bloques.
+/// @param new_block Bloque a agregar a la lista.
 void append_block(block_header_t *new_block);
 
+/// @brief Calcula el tamaño del bloque necesario para albergar la región pedida
+/// @param size Tamaño de memoria solicitado por el usuario.
+/// @return Tamaño del bloque si la region puede ser contenida dentro de las
+/// categorias. Devuelve -1 en caso de que no pueda ser contenida
 int get_block_size(size_t size);
 
+/// @brief Pide un nuevo bloque de memoria al S.O. y lo guarda en la lista.
+/// @param size Tamaño de memoria solicitado por el usuario.
+/// @return Puntero al comienzo de bloque, incluyendo su header. Retorna NULL en
+/// caso de no poder albergar el tamaño pedido. Retorna NULL y setea errno =
+/// ENOMEM en caso del que pedido de memoria falle
 block_header_t *new_block(size_t size);
 
+/// @brief Obtiene una nueva región pidiendo memoria al S.O.
+/// @param size Tamaño de la región.
+/// @return Puntero a la región, incluyendo su header. Retorna NULL en caso de
+/// no poder pedir el tamaño pedido. Retorna NULL y setea errno = ENOMEM en caso
+/// del que pedido de memoria falle.
 region_header_t *new_region(size_t size);
 
+/// @brief Divide una REGION de memoria en dos, suponiendo que ambas REGIONES
+/// puedan ser potencialmente usadas. Si la REGION es divivida, se actualizara
+/// el puntero de next para que apunte a la siguiente region.
+/// @param region REGION a ser potencialmente dividida
+/// @param size Tamaño de la REGION que debe tener en caso de ser dividida.
 void split_region(region_header_t *region, size_t size);
 
+/// @brief Realiza un split en una determinada region.
+/// @param region Region a la cual se le aplicará el split.
+/// @param size Tamaño que debe tener la región que luego se le retornará al usuario (Region 1).
 void try_split_region(region_header_t *region, size_t size);
 
+/// @brief Junta dos REGIONES, manteniendo la mas "izquierda" como la sobreviviente.
+/// @param region REGION sobreviviente, se junta con la region next (es decir, la region a su "derecha").
+/// @return Devuelve la REGION sobreviviente con los punteros modificados
 region_header_t *coalesce_region_with_its_next(region_header_t *region);
 
+/// @brief Intenta juntar las regiones adyacentes a la REGION pasada. Se
+/// juntaran en caso de que alguna de las dos (o ambas) esten libres. Se intenta
+/// juntar las REGIONES de "derecha" a "izquierda".
+/// @param region Region la cual se chequeara si puede ser unida a sus regiones
+/// adyacentes.
+/// @return La REGION sobreviviente luego de intentar juntarlas. Puede ser la
+/// region pasada originalmente, o la region adyacente "izquierda".
 region_header_t *try_coalesce_regions(region_header_t *region);
 
+/// @brief Devuelve un BLOQUE que se encuentra totalmente liberado al S.O.
+/// Actualiza la lista de bloques
+/// @param block_header Puntero al BLOQUE a liberar
 void return_block_to_OS(block_header_t *block_header);
 
-bool are_all_block_free(region_header_t *region);
+/// @brief Responde si el BLOQUE en el que esta contenido una REGION esta completamente libre
+/// @param region REGION a preguntar
+/// @return True en caso de que todas las regiones se encuentren libres y False en caso contrario
+bool are_all_regions_free(region_header_t *region);
 
+/// @brief Determina si la dirección de un puntero está contenida en alguno de los bloques.
+/// @param ptr Puntero a verificar.
+/// @return Retorna True en caso de que el puntero se encuentre contenido en alguno
+/// de los bloques o False en caso contrario.
 bool is_ptr_into_blocks(byte *ptr);
 
-int is_valid_ptr(byte *ptr);
+/// @brief Responde si un puntero es valido para ser tratado como región
+/// @param ptr Puntero a verificar.
+/// @return Retorna True en caso de que el puntero sea válido o False en caso contrario.
+bool is_valid_ptr(byte *ptr);
 
+/// @brief Setea los N bytes de PTR al valor C
+/// @param ptr Puntero al inicio de la memoria
+/// @param c Valor al que sera seteada la memoria
+/// @param n Cantidad de bytes a setear
 void set_mem(void *ptr, char c, size_t n);
 
+/// @brief Mueve los primeros N bytes de src a dest
+/// @param _dest Destino donde serán movidos los bytes
+/// @param _src Fuente a partir de la cual se extran los bytes.
+/// @param n Cantidad de bytes a mover.
 void move_data(void *_dest, void *_src, int n);
 
+/// @brief Realiza un split de la región y a la nueva region libre le aplica un
+/// coalesce con la siguiente
+/// @param region Región a la cual se le realiza el split
+/// @param size Tamaño con el cual quedará la región luego de las operaciones
 void split_and_coalesce_next_regions(region_header_t *region, size_t size);
 
+/// @brief Maneja el realloc cuando se requiere menos memoria.
+/// @param region Region brindada por el usuario.
+/// @param size Tamaño de memoria solicitado por el usuario.
+/// @return Puntero que será devuelto al usuario.
 void *handle_realloc_that_requires_less_memory(region_header_t *region,
                                                size_t size);
 
+/// @brief Responde si la region no es NULL y si esta libre
+/// @param region
+/// @return
 bool is_free(region_header_t *region);
 
+/// @brief Suma el tamaño de las potenciales tres regiones, teniendo en cuenta el tamaño del header
+/// @param region_one No puede ser NULL
+/// @param region_two Puede ser NULL
+/// @param region_three Puede ser NULL
+/// @return Suma del tamaño de las regiones mas el tamaño de los headers.
 size_t sum_of_regions(region_header_t *region_one,
                       region_header_t *region_two,
                       region_header_t *region_three);
 
 
+/// @brief Determina si las regiones están libres para aplicarles coalesce
+/// @param region Region brindada por el ususario.
+/// @param size Tamaño de memoria solicitado por el usuario.
+/// @param region_1 Región a verificar.
+/// @param region_2 Región a verificar (opcional).
+/// @return
 bool are_free_to_coalesce(region_header_t *region,
                           size_t size,
                           region_header_t *region_1,
                           region_header_t *region_2);
 
 
+/// @brief Realloca la memoria con la siguiente región.
+/// @param region Región a ser reallocateada.
+/// @param size Tamaño de memoria solicitado por el usuario.
+/// @return Puntero que será devuelto al usuario.
 void *reallocate_with_next_region(region_header_t *region, size_t size);
 
+/// @brief Realloca la memoria con la anterior región.
+/// @param region Región a ser reallocateada.
+/// @param size Tamaño de memoria solicitado por el usuario.
+/// @return Puntero que será devuelto al usuario.
 void *reallocate_with_prev_region(region_header_t *region, size_t size);
 
+/// @brief Realloca la memoria con la anterior y siguiente región.
+/// @param region Región a ser reallocateada.
+/// @param size Tamaño de memoria solicitado por el usuario.
+/// @return Puntero que será devuelto al usuario.
 void *reallocate_with_next_and_prev_region(region_header_t *region, size_t size);
 
+/// @brief Realloca la memoria en una nueva región reservada con malloc. La
+/// información del usuario es movida al nuevo segmento de memoria.
+/// @param region Región a ser reallocateada.
+/// @param size Tamaño de memoria solicitado por el usuario.
+/// @return Puntero que será devuelto al usuario.
 void *reallocate_on_new_region(region_header_t *region, size_t size);
 
+/// @brief Maneja el realloc para el caso en que el usuario solició más memoria
+/// que la que poseía su región.
+/// @param region Región a ser reallocateada.
+/// @param size Tamaño de memoria solicitado por el usuario.
+/// @return Puntero que será devuelto al usuario.
 void *handle_realloc_that_requires_more_memory(region_header_t *region,
                                                size_t size);
 
+/// @brief Maneja el realloc.
+/// @param region Región a ser reallocateada.
+/// @param size Tamaño de memoria solicitado por el usuario.
+/// @return Puntero que será devuelto al usuario.
 void *handle_realloc(region_header_t *region, size_t size);
 
+//===========================================================//
+//======================== FUNCTIONS ========================//
+//===========================================================//
+
+
+//======================== SECONDARY ========================//
+
+
+//======================== MALLOC ========================//
 
 region_header_t *
 loop_for_first_fit_region(region_header_t *start_region, size_t size)
@@ -158,7 +297,6 @@ loop_for_first_fit_region(region_header_t *start_region, size_t size)
 	}
 	return NULL;
 }
-
 
 static region_header_t *
 find_region_first_fit(size_t size)
@@ -209,9 +347,6 @@ find_region_best_fit(size_t size)
 	return curr_best_region;
 }
 
-// finds the next free region
-// that holds the requested size
-//
 static region_header_t *
 find_free_region(size_t size)
 {
@@ -229,13 +364,7 @@ find_free_region(size_t size)
 #endif
 #endif
 }
-// ============================================
 
-// MALLOC
-
-
-/// @brief Agrega un nuevo BLOQUE a la lista de bloques de malloc, estando, o no, la lista vacia.
-/// @param new_block BLOQUE a agregar a la lista
 void
 append_block(block_header_t *new_block)
 {
@@ -250,10 +379,6 @@ append_block(block_header_t *new_block)
 	block_header_tail = new_block;
 }
 
-/// @brief Calcula el tamaño del BLOQUE necesario para albergar la REGION pedida
-/// @param size Tamaño de la REGION pedida
-/// @return Tamaño del BLOQUE si la region puede ser contenida dentro de las
-/// categorias. Devuelve -1 en caso de que no pueda ser contenida
 int
 get_block_size(size_t size)
 {
@@ -267,12 +392,6 @@ get_block_size(size_t size)
 	return EXIT_ERROR;
 }
 
-/// @brief Pide un nuevo BLOQUE de memoria al S.O. dado un tamaño de REGION.
-/// Guarda el BLOQUE en la lista.
-/// @param size Tamaño de la REGION
-/// @return Puntero al comienzo de bloque, incluyendo su header. Retorna NULL en
-/// caso de no poder albergar el tamaño pedido. Retorna NULL y setea errno =
-/// ENOMEM en caso del que pedido de memoria falle
 block_header_t *
 new_block(size_t size)
 {
@@ -310,13 +429,6 @@ new_block(size_t size)
 	return new_block_header;
 }
 
-
-/// @brief Obtiene una nueva REGION pidiendo memoria al S.O. Guarda el BLOQUE
-/// que contiene la region en la lista.
-/// @param size Tamaño de la REGION.
-/// @return Puntero a la REGION, incluyendo su header. Retorna NULL en caso de
-/// no poder pedir el tamaño pedido. Retorna NULL y setea errno = ENOMEM en caso
-/// del que pedido de memoria falle.
 region_header_t *
 new_region(size_t size)
 {
@@ -330,7 +442,6 @@ new_region(size_t size)
 	new_region_header = BLOCK2REGION(new_block_header);
 	new_region_header->size =
 	        new_block_header->size - sizeof(region_header_t);
-	new_region_header->block_header = new_block_header;
 	new_region_header->next = NULL;
 	new_region_header->prev = NULL;
 	new_region_header->free = true;
@@ -341,22 +452,15 @@ new_region(size_t size)
 	return new_region_header;
 }
 
-/// @brief Divide una REGION de memoria en dos, suponiendo que ambas REGIONES
-/// puedan ser potencialmente usadas. Si la REGION es divivida, se actualizara
-/// el puntero de next para que apunte a la siguiente region.
-/// @param region REGION a ser potencialmente dividida
-/// @param size Tamaño de la REGION que debe tener en caso de ser dividida.
 void
 split_region(region_header_t *region, size_t size)
 {
-	block_header_t *block_header = region->block_header;
 	region_header_t *new_next_region;
 
 	new_next_region = SPLITREGION(region, size);
 	new_next_region->next = region->next;
 	new_next_region->prev = region;
 	new_next_region->size = region->size - size - sizeof(region_header_t);
-	new_next_region->block_header = block_header;
 	new_next_region->free = true;
 	new_next_region->check_num = MAGIC_32BIT;
 
@@ -367,9 +471,6 @@ split_region(region_header_t *region, size_t size)
 	INCREASE_STATS(curr_regions, 1);
 }
 
-/// @brief Realiza un split en una determinada region.
-/// @param region Region a la cual se le aplicará el split.
-/// @param size Tamaño que debe tener la región que luego se le retornará al usuario (Region 1).
 void
 try_split_region(region_header_t *region, size_t size)
 {
@@ -386,13 +487,9 @@ try_split_region(region_header_t *region, size_t size)
 	INCREASE_STATS(given_amnt, region->size);
 }
 
-// ============================================
 
-// FREE
+//======================== FREE ========================//
 
-/// @brief Junta dos REGIONES, manteniendo la mas "izquierda" como la sobreviviente.
-/// @param region REGION sobreviviente, se junta con la region next (es decir, la region a su "derecha").
-/// @return Devuelve la REGION sobreviviente con los punteros modificados
 region_header_t *
 coalesce_region_with_its_next(region_header_t *region)
 {
@@ -408,13 +505,6 @@ coalesce_region_with_its_next(region_header_t *region)
 	return region;
 }
 
-/// @brief Intenta juntar las regiones adyacentes a la REGION pasada. Se
-/// juntaran en caso de que alguna de las dos (o ambas) esten libres. Se intenta
-/// juntar las REGIONES de "derecha" a "izquierda".
-/// @param region Region la cual se chequeara si puede ser unida a sus regiones
-/// adyacentes.
-/// @return La REGION sobreviviente luego de intentar juntarlas. Puede ser la
-/// region pasada originalmente, o la region adyacente "izquierda".
 region_header_t *
 try_coalesce_regions(region_header_t *region)
 {
@@ -427,9 +517,6 @@ try_coalesce_regions(region_header_t *region)
 	return region;
 }
 
-/// @brief Devuelve un BLOQUE que se encuentra totalmente liberado al S.O.
-/// Actualiza la lista de bloques
-/// @param block_header Puntero al BLOQUE a liberar
 void
 return_block_to_OS(block_header_t *block_header)
 {
@@ -454,13 +541,8 @@ return_block_to_OS(block_header_t *block_header)
 	munmap(block_header, block_header->size + sizeof(block_header_t));
 }
 
-// ============================================
-
-/// @brief Responde si el BLOQUE en el que esta contenido una REGION esta completamente libre
-/// @param region REGION a preguntar
-/// @return
 bool
-are_all_block_free(region_header_t *region)
+are_all_regions_free(region_header_t *region)
 {
 	return (!region->prev && !region->next && region->free);
 }
@@ -489,11 +571,7 @@ is_ptr_into_blocks(byte *ptr)
 	return false;
 }
 
-
-/// @brief Responde si un puntero es valido para ser tratado como REGION
-/// @param ptr
-/// @return
-int
+bool
 is_valid_ptr(byte *ptr)
 {
 	region_header_t *region;
@@ -530,11 +608,8 @@ set_mem(void *ptr, char c, size_t n)
 		bptr[i] = c;
 }
 
+//======================== REALLOC ========================//
 
-/// @brief Mueve los primeros N bytes de src a dest
-/// @param _dest
-/// @param _src
-/// @param n
 void
 move_data(void *_dest, void *_src, int n)
 {
@@ -546,10 +621,6 @@ move_data(void *_dest, void *_src, int n)
 	}
 }
 
-/// @brief Realiza un split de la región y a la nueva region libre le aplica un
-/// coalesce con la siguiente
-/// @param region Región a la cual se le realiza el split
-/// @param size Tamaño con el cual quedará la región luego de las operaciones
 void
 split_and_coalesce_next_regions(region_header_t *region, size_t size)
 {
@@ -562,7 +633,6 @@ split_and_coalesce_next_regions(region_header_t *region, size_t size)
 	new_next_region->next = last_next_region->next;
 	new_next_region->prev = last_next_region->prev;
 	new_next_region->size = last_next_region->size + (region->size - size);
-	new_next_region->block_header = last_next_region->block_header;
 	new_next_region->free = true;
 	new_next_region->check_num = MAGIC_32BIT;
 
@@ -583,20 +653,14 @@ handle_realloc_that_requires_less_memory(region_header_t *region, size_t size)
 	return REGION2PTR(region);
 }
 
-/// @brief Responde si la region no es NULL y si esta libre
-/// @param region
-/// @return
+
 bool
 is_free(region_header_t *region)
 {
 	return (region && region->free);
 }
 
-/// @brief Suma el tamaño de las potenciales tres regiones, teniendo en cuenta el tamaño del header
-/// @param region_one No puede ser NULL
-/// @param region_two Puede ser NULL
-/// @param region_three Puede ser NULL
-/// @return Suma del tamaño de las regiones mas el tamaño de los headers.
+
 size_t
 sum_of_regions(region_header_t *region_one,
                region_header_t *region_two,
@@ -692,7 +756,6 @@ handle_realloc_that_requires_more_memory(region_header_t *region, size_t size)
 	return reallocate_on_new_region(region, size);
 }
 
-
 void *
 handle_realloc(region_header_t *region, size_t size)
 {
@@ -704,6 +767,9 @@ handle_realloc(region_header_t *region, size_t size)
 
 	return handle_realloc_that_requires_more_memory(region, size);
 }
+
+
+//======================== PRINCIPAL ========================//
 
 void *
 malloc(size_t size)
@@ -811,6 +877,6 @@ free(void *ptr)
 
 	region_to_free = try_coalesce_regions(region_to_free);
 
-	if (are_all_block_free(region_to_free))
-		return_block_to_OS(region_to_free->block_header);
+	if (are_all_regions_free(region_to_free))
+		return_block_to_OS(REGION2BLOCK(region_to_free));
 }
