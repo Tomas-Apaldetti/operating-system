@@ -1,15 +1,15 @@
-# **TP: malloc**
+# **TP1: malloc**
 
 ## Estructuras utilizadas
 
 ### Regiones (region_header_t)
 
-En un comienzo, la implementación de malloc se realizó únicamente mediantes regiones, las cuales eran almacenadas en un bloque de tamaño fijo. Estas regiones mencionadas, dentro de su estructura, contenían la siguiente información:
+En un comienzo, la implementación de malloc se pensó únicamente mediante regiones, las cuales eran almacenadas en un bloque de tamaño fijo. Estas regiones mencionadas, dentro de su estructura, contenían la siguiente información:
 - *size* : Tamaño de la región.
 - *free* : El estado de la región (Libre o no libre).
 - *next* : Un puntero a la siguiente región.
 
-En un principio, la idea de una lista simplemente enlazada para almacenar todas las regiones de un único bloque fue simple de implementar. Sin embargo, la idea de una lista simplemente enlazada comenzó a quedar deprecada por la gran complejidad computacional que tenían ciertas operaciones. Allí es donde surgió la idea de que la lista de regiones no sea mediante una lista simplemente enlazada, sino que con el objetivo de optimizar la implementación de malloc, la misma sea con una lista doblemente enlazada. 
+En un principio, la idea de una lista simplemente enlazada para almacenar todas las regiones de un único bloque fue simple de implementar. Sin embargo, la idea de una lista simplemente enlazada comenzó a quedar deprecada por la gran complejidad computacional que tenían ciertas operaciones (por ejemplo, se tenía como primer approach de coalesce el recorrer toda la lista de regiones para juntarlas todas cada vez). Allí es donde surgió la idea de que la lista de regiones no sea mediante una lista simplemente enlazada, sino que con el objetivo de optimizar la implementación de malloc, la misma sea con una lista doblemente enlazada. 
 
 Además de la lograr una gran optimización mediante el cambio de estilo de lista, se debieron agregar mas campos a la estructura un número especial de verificación que será explicado posteriormente a medida que se desarrollen los temas. Con todo lo explicado hasta el momento llegamos a una estructura de región conformada de la siguiente manera:
 - *size* : Tamaño de la región.
@@ -39,7 +39,11 @@ Como podemos ver, la información del bloque se encuentra previa al header de la
 
 ### Comentarios generales
 
-Como se comentó en la explicación de las regiones, todo comenzó con un único bloque que contenía multiples regiones mediante la utilización de una lista simplemente enlazada. Este bloque que se le solicitaba al Sistema Operativo, en un principio se lo tomaba como una región completamente libre a la cual, dependiendo de la memoria que haya solicitado el usuario, se le realizaba un *split* y se la partía en dos regiones (una libre que quedaría disponible para una futura solicitud del usuario y una región ocupada). Esta idea de comenzar con una única región libre y realizarle un *split* se llevó también a cabo cuando se implementaron múltiples bloques.
+Como se comentó en la explicación de las regiones, la implementación comenzó con un único bloque que contenía multiples regiones mediante la utilización de una lista simplemente enlazada. 
+
+Este bloque que se le solicitaba al Sistema Operativo, en un principio se lo tomaba como una región completamente libre a la cual, dependiendo de la memoria que haya solicitado el usuario, se le realizaba un *split* y se la partía en dos regiones (una libre que quedaría disponible para una futura solicitud del usuario y una región ocupada). 
+
+Esta idea de comenzar con una única región libre y realizarle un *split* se llevó también a cabo cuando se implementaron múltiples bloques.
 
 ### Split
 
@@ -53,9 +57,13 @@ Un split de regiones solo es realizable en caso de que la memoria inutilizada pe
 
 ### Coalesce
 
-El *coalesce* de regiones, al igual que el *split*, se realiza siempre que sea posible, pero esta vez evitando la fragmentación externa. Dado que el *coalesce* entre dos regiones libres no tiene mayor complejidad que generar un único header y aumentar el tamaño de la misma, se explicará en dónde fue realizado el *coalesce* y por qué no es necesario iterar sobre todas las regiones de todos los bloques en nuestra implementación. En los momentos en los cuales se aplica *coalesce* en nuestra implementación es en los siguientes:
-- *free* : A la hora de liberar un bloque con free, siempre se intenta realizar un coalesce con las dos regiones vecinas (la anterior y la siguiente según implementación de lista doblemente enlazada), generando así que no haya posibilidad de que existan regiones contiguas libres. Aquí es donde se vé una gran ventaja de la utilización de listas doblemente enlazada. Un detalle importante a remarcar es que en caso de que se realice un *coalesce* de todas las regiones, y por lo tanto quede todo el bloque libre, el mismo se retorna al Sistema Opertativo. 
-- *realloc* : Para la optimización del realloc en donde se utilizan las regiones libres contiguas, es necesario realizar un *coalesce* para unir las mismas. 
+El *coalesce* de regiones, al igual que el *split*, se realiza siempre que sea posible, pero esta vez evitando la fragmentación externa. 
+
+Dado que el *coalesce* entre dos regiones libres no tiene mayor complejidad que generar un único header y aumentar el tamaño de la misma, se explicará en dónde fue realizado el *coalesce* y por qué no es necesario iterar sobre todas las regiones de todos los bloques en nuestra implementación (siempre se trata de un procedimiento con regiones adyacentes). 
+
+Se aplica *coalesce* en nuestra implementación es en los siguientes escenarios:
+- *free* : A la hora de liberar un bloque con free, siempre se intenta realizar un coalesce con las dos regiones vecinas (la anterior y la siguiente según implementación de lista doblemente enlazada), generando así que no haya posibilidad de que existan regiones contiguas libres. Aquí es donde se vé una gran ventaja de la utilización de listas doblemente enlazadas. Un detalle importante a remarcar es que en caso de que se realice un *coalesce* de todas las regiones de un bloque, y por lo tanto quede dicho bloque como libre, el mismo se retorna al Sistema Opertativo. 
+- *realloc* : Para la optimización del realloc en donde se utilizan las regiones libres contiguas, es necesario realizar un *coalesce* para unir las mismas. De esta forma se termina de garantizar que en ninguna operacion se puede llegar a generar fragmentacion interna permanente.
 
 ### Malloc
 
@@ -97,9 +105,13 @@ Paso a paso simplificado:
 
 ### Verificacion de punteros recibidos
 
-Para la verificación del puntero recibido en las funciones `realloc` y `free` se desarrolló una técnica que permite no recorrer todas las regiones de todos los bloques chequeando que el puntero recibido coincida con alguno de los mismos. Para esto se pensaron varias alternativas, de las cuales nos pareció que la mas óptima era primero verificar que la dirección del puntero se encuentre contenida en alguno de los bloques (esto ya nos protege frente a un acceso de memoria inválido). Ahora, para chequear que el puntero que nos enviaron corresponda al primer elemento de la mmeoria del usuario es que utilizamos dentro de la estructura de una región, un valor que contiene un número especial de verificación. Todas las regiones lo contienen y es un número aleatorio para justamente verificar que el puntero dado esté en la posición correcta y asi evitar accesos a memoria corrupta.
+Para la verificación del puntero recibido en las funciones `realloc` y `free` se desarrolló una técnica que permite no recorrer todas las regiones de todos los bloques chequeando que el puntero recibido coincida con alguno de los mismos. 
 
-## Decisiones de diseño
+Para esto se pensaron varias alternativas, de las cuales nos pareció que la mas óptima era primero verificar que la dirección del puntero se encuentre contenida en alguno de los bloques (esto ya nos protege frente a un acceso de memoria inválido). 
+
+Ahora, para chequear que el puntero que nos enviaron corresponda al primer elemento de la mmeoria del usuario es que utilizamos dentro de la estructura de una región, un valor que contiene un número especial de verificación. Todas las regiones lo contienen y es un número aleatorio para justamente verificar que el puntero dado esté en la posición correcta y asi evitar accesos a memoria corrupta.
+
+## Decisiones de diseño adicionales
 
 ### Estadisticas
 
