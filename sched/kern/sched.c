@@ -5,13 +5,30 @@
 #include <kern/pmap.h>
 #include <kern/monitor.h>
 
+int32_t last_env_run = 0;
+
 void sched_halt(void);
 
 // Choose a user environment to run and run it.
 void
 sched_yield(void)
 {
-	
+	if(curenv){
+		last_env_run = curenv->env_id;
+	}
+
+	for(int32_t i = last_env_run; i < NENV; i++){
+		if(envs[i].env_status == ENV_RUNNABLE){
+			env_run(envs+i);
+		}
+	}
+
+	for(int32_t i = 0 ; i < last_env_run; i++){
+		if(envs[i].env_status == ENV_RUNNABLE ||
+			(envs[i].env_status == ENV_RUNNING && envs[i].env_id == last_env_run)){
+			env_run(envs+i);
+		}
+	}
 
 	// Implement simple round-robin scheduling.
 	//
@@ -27,14 +44,6 @@ sched_yield(void)
 	// another CPU (env_status == ENV_RUNNING). If there are
 	// no runnable environments, simply drop through to the code
 	// below to halt the cpu.
-	struct Env *curr = envs;
-	while(curr){
-		if(curr->env_status == ENV_RUNNABLE ||
-			curr->env_status == ENV_RUNNING){
-			env_run(curr);
-		}
-		curr = curr->env_link;
-	}
 	// Your code here
 	// Wihtout scheduler, keep runing the last environment while it exists
 	// if (curenv) {
