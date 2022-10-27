@@ -78,3 +78,17 @@ TRAPHANDLER_NOEC(trap48, T_SYSCALL)
  * Your code here for _alltraps
  */
 _alltraps:
+/*  pushl %ss					|																	|
+ *	pushl %esp					|																	|
+ *	pushl %eflags				| -> Done by the proccessor											|
+ *	pushl %cs					|																	|	
+ *	pushl %eip				   _|																	|
+ *	pushl %0 || err_code		| -> Done by the processor or forced by previous code				|
+ *	pushl %errno			   _|																	| --> struct Trapframe
+ */																	#								| 
+	pushl %ds 	/*Stack ds register */								#								|													
+	pushl %es	/*Stack es register */								#								|	
+	pushal		/*Stack general purpose registers */				#							   _|
+	pushl %esp	/*Parameter of f: trap(struct Trapframe *tf) */		#								
+	call trap	
+
