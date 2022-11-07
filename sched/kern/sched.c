@@ -13,23 +13,6 @@ void sched_halt(void);
 void
 sched_yield(void)
 {
-	if(curenv){
-		last_env_run = curenv->env_id;
-	}
-
-	for(int32_t i = last_env_run; i < NENV; i++){
-		if(envs[i].env_status == ENV_RUNNABLE){
-			env_run(envs+i);
-		}
-	}
-
-	for(int32_t i = 0 ; i < last_env_run; i++){
-		if(envs[i].env_status == ENV_RUNNABLE ||
-			(envs[i].env_status == ENV_RUNNING && envs[i].env_id == last_env_run)){
-			env_run(envs+i);
-		}
-	}
-
 	// Implement simple round-robin scheduling.
 	//
 	// Search through 'envs' for an ENV_RUNNABLE environment in
@@ -44,13 +27,34 @@ sched_yield(void)
 	// another CPU (env_status == ENV_RUNNING). If there are
 	// no runnable environments, simply drop through to the code
 	// below to halt the cpu.
+
 	// Your code here
-	// Wihtout scheduler, keep runing the last environment while it exists
-	// if (curenv) {
-	// 	env_run(curenv);
-	// }
- 
-	// sched_halt never returns
+	struct Env *curr_env;
+
+	if (curenv)
+		curr_env = curenv + 1;
+	else
+		curr_env = envs;
+
+	while (curr_env < envs + NENV) {
+		if (curr_env->env_status == ENV_RUNNABLE) {
+			env_run(curr_env);
+		}
+		curr_env = curr_env + 1;
+	}
+
+	if (!curenv)
+		sched_halt();
+
+	curr_env = envs;
+	while (curr_env <= curenv) {
+		if ((curr_env->env_status == ENV_RUNNABLE) ||
+		    (curr_env->env_status == ENV_RUNNING && curr_env == curenv)) {
+			env_run(curr_env);
+		}
+		curr_env = curr_env + 1;
+	}
+
 	sched_halt();
 }
 
@@ -88,8 +92,8 @@ sched_halt(void)
 	// Release the big kernel lock as if we were "leaving" the kernel
 	unlock_kernel();
 
-	// Once the scheduler has finishied it's work, print statistics on performance.
-	// Your code here
+	// Once the scheduler has finishied it's work, print statistics on
+	// performance. Your code here
 
 	// Reset stack pointer, enable interrupts and then halt.
 	asm volatile("movl $0, %%ebp\n"
