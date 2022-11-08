@@ -73,7 +73,11 @@ i386_init(void)
 	ENV_CREATE(user_hello, ENV_TYPE_USER);
 #endif  // TEST*
 
-	// Schedule and run the first user environment!
+// Schedule and run the first user environment!
+#if defined(MLFQ_SHED)
+	sched_init_MLFQ();
+#endif
+
 	sched_yield();
 }
 
