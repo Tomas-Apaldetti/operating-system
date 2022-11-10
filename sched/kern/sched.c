@@ -9,13 +9,14 @@
 #define NQUEUES 8
 #define MLFQ_LIMIT 3
 #define MLFQ_NPBOOST 15
+
 typedef struct queue {
 	struct Env *envs;
 	struct Env *last_env;
 	int32_t num_envs;
 } queue_t;
 
-int32_t schedno = 1;
+int32_t schedno = 0;
 queue_t queues[NQUEUES] = { { 0 } };
 
 void sched_halt(void);
@@ -66,30 +67,70 @@ sched_round_robin(struct Env *enviroments, int32_t num_envs, struct Env *last_ru
 	}
 }
 
-void
-queue_remove(queue_t *queue, struct Env *env)
+struct Env *
+queue_remove_rec(queue_t *queue,
+                 struct Env *prev_env,
+                 struct Env *curr_env,
+                 struct Env *env_to_rmv)
 {
-	struct Env *last = NULL;
-	struct Env *next = queue->envs;
-	while (next) {
-		if (env == next) {
-			// Remove from queue, treating it as a list
-			if (last) {
-				last->next_env = env->next_env;
-			} else {
-				queue->envs = env->next_env;
+	if (!curr_env) {
+		return NULL;
+	}
+
+	if (curr_env == env_to_rmv) {
+		if (queue->last_env == env_to_rmv) {
+			if (prev_env) {
+				prev_env->next_env = curr_env->next_env;
 			}
 
-			if (env == queue->last_env) {
-				queue->last_env = env->next_env;
-			}
+			queue->last_env = prev_env;
 		}
 
-		last = next;
-		next = next->next_env;
-		queue->num_envs--;
-		return;
+		return curr_env->next_env;
 	}
+
+	return queue_remove_rec(queue, curr_env, curr_env->next_env, env_to_rmv);
+}
+
+void
+print_queue(queue_t *queue)
+{
+	struct Env *curr_env = queue->envsenvs;
+	while (curr_env) {
+		cprintf("%p -> %p |", curr_env, curr_env->next_env);
+	}
+	cprintf("\n");
+}
+
+void
+queue_remove(queue_t *queue, struct Env *env_to_rmv)
+{
+	queue->envs = queue_remove_rec(queue, NULL, queue->envs, env_to_rmv);
+	queue->num_envs--;
+
+	// struct Env *curr_env = queue->envs;
+	// struct Env *prev_env = NULL;
+
+	// while (curr_env) {
+	// 	if (env_to_rmv == curr_env) {
+	// 		// Remove from queue, treating it as a list
+	// 		if (prev_env) {
+	// 			prev_env->next_env = curr_env->next_env;
+	// 		} else {
+	// 			queue->envs = curr_env->next_env;
+	// 		}
+
+	// 		if (curr_env == queue->last_env) {
+	// 			queue->last_env = curr_env->next_env;
+	// 		}
+
+	// 		queue->num_envs--;
+	// 		return;
+	// 	}
+
+	// 	prev_env = curr_env;
+	// 	curr_env = curr_env->next_env;
+	// }
 }
 
 struct Env *
@@ -109,18 +150,26 @@ queue_pop(queue_t *queue)
 void
 queue_push(queue_t *queue, struct Env *env)
 {
-	if (!env)
-		return;
+	// struct Env *last = queue->last_env;
+	// if (!last) {
+	// 	queue->envs = env;
+	// 	last = env;
+	// }
 
-	struct Env *last = queue->last_env;
-	if (!last) {
+	// last->next_env = env;
+	// env->next_env = NULL;
+
+	// queue->last_env = env;
+
+	//
+	if (queue->num_envs == 0) {
 		queue->envs = env;
-		last = env;
+	} else {
+		queue->last_env->next_env = env;
 	}
 	queue->last_env = env;
-	last->next_env = env;
-	env->next_env = NULL;
 	queue->num_envs += 1;
+	env->next_env = NULL;
 }
 
 void
@@ -140,10 +189,9 @@ env_change_priority(struct Env *env, int32_t new_priority)
 void
 env_try_downgrade(struct Env *env)
 {
-	if (env->env_runs > MLFQ_LIMIT && env->queue_num < NQUEUES)
+	if (env->env_runs > MLFQ_LIMIT && env->queue_num < NQUEUES - 1)
 		env_change_priority(env, env->queue_num - 1);
 }
-
 
 void
 sched_MLFQ(void)
@@ -202,17 +250,19 @@ sched_MLFQ(void)
 }
 
 void
-env_MLFQ_init(struct Env *env)
+sched_create_env(struct Env *env)
 {
 	env->next_env = NULL;
 	env->queue_num = 0;
+
 	queue_push(queues, env);
 }
 
 void
-env_MLFQ_destroy(struct Env *env)
+sched_destroy_env(struct Env *env)
 {
 	queue_remove(&queues[env->queue_num], env);
+
 	env->queue_num = 0;
 	env->next_env = NULL;
 }
@@ -240,7 +290,7 @@ sched_yield(void)
 	// below to halt the cpu.
 
 	// Your code here
-	sched_round_robin(envs, NENV, curenv);
+	sched_round_robin(queues[0].envs, NENV, curenv);
 #endif
 	sched_halt();
 }

@@ -119,10 +119,8 @@ env_init(void)
 		envs[i].env_id = 0;
 		envs[i].env_status = ENV_FREE;
 		envs[i].env_link = (envs + i + 1);
-		envs[i].next_env = (envs + i + 1);
 	}
 	envs[NENV - 1].env_link = NULL;
-	envs[NENV - 1].next_env = NULL;
 	env_free_list = envs;
 
 	// Per-CPU part of the initialization
@@ -229,7 +227,6 @@ env_alloc(struct Env **newenv_store, envid_t parent_id)
 	e->env_type = ENV_TYPE_USER;
 	e->env_status = ENV_RUNNABLE;
 	e->env_runs = 0;
-
 
 	// Clear out all the saved register state,
 	// to prevent the register values
@@ -399,6 +396,8 @@ env_create(uint8_t *binary, enum EnvType type)
 	if (err < 0)
 		panic("env_create: %e\n", err);
 
+	sched_create_env(env);
+
 	load_icode(env, binary);
 	env->env_type = type;
 }
@@ -472,6 +471,7 @@ env_destroy(struct Env *e)
 	}
 
 	env_free(e);
+	sched_destroy_env(e);
 
 	if (curenv == e) {
 		// cprintf("[%08x] env_destroy %08x\n", curenv ? curenv->env_id : 0, e->env_id);
