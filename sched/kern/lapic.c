@@ -33,6 +33,7 @@
 #define TIMER   (0x0320/4)   // Local Vector Table 0 (TIMER)
 	#define X1         0x0000000B   // divide counts by 1
 	#define PERIODIC   0x00020000   // Periodic
+	#define ONE_SHOT   0x00000000 	// One-Shot source: https://xem.github.io/minix86/manual/intel-x86-and-64-manual-vol3/o_fe12b1e2a880e0ce.html
 #define PCINT   (0x0340/4)   // Performance Counter LVT
 #define LINT0   (0x0350/4)   // Local Vector Table 1 (LINT0)
 #define LINT1   (0x0360/4)   // Local Vector Table 2 (LINT1)
@@ -53,6 +54,18 @@ lapicw(int index, int value)
 }
 
 void
+lapicwr(int index, int value)
+{
+	lapicw(index, value);
+}
+
+uint32_t
+lapicr(int index)
+{
+	return lapic[index];
+}
+
+void
 lapic_init(void)
 {
 	if (!lapicaddr)
@@ -70,8 +83,8 @@ lapic_init(void)
 	// If we cared more about precise timekeeping,
 	// TICR would be calibrated using an external time source.
 	lapicw(TDCR, X1);
-	lapicw(TIMER, PERIODIC | (IRQ_OFFSET + IRQ_TIMER));
-	lapicw(TICR, 10000000); 
+	lapicw(TIMER, ONE_SHOT | (IRQ_OFFSET + IRQ_TIMER));
+	// lapicw(TICR, 10000000); Not needed when initializing in one-shot
 
 	// Leave LINT0 of the BSP enabled so that it can get
 	// interrupts from the 8259A chip.

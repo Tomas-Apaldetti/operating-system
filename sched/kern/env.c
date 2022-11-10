@@ -537,5 +537,6 @@ env_run(struct Env *e)
 	//	   registers and drop into user mode in the
 	//	   environment.
 	// Your code here
+	TIMER_RESET(curenv->queue_num);
 	context_switch(&e->env_tf);
 }

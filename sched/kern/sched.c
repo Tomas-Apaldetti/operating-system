@@ -4,11 +4,10 @@
 #include <kern/env.h>
 #include <kern/pmap.h>
 #include <kern/monitor.h>
+#include <kern/sched.h>
 
 // #define MLFQ_SCHED
-#define NQUEUES 8
-#define MLFQ_LIMIT 3
-#define MLFQ_NPBOOST 15
+
 typedef struct queue {
 	struct Env *envs;
 	struct Env *last_env;
@@ -140,7 +139,8 @@ env_change_priority(struct Env *env, int32_t new_priority)
 void
 env_try_downgrade(struct Env *env)
 {
-	if (env->env_runs > MLFQ_LIMIT && env->queue_num < NQUEUES)
+	if (env->time_in_queue > MLFQ_BASE_LIMIT(env->queue_num) && 
+		env->queue_num < NQUEUES - 1)
 		env_change_priority(env, env->queue_num - 1);
 }
 
@@ -206,6 +206,7 @@ env_MLFQ_init(struct Env *env)
 {
 	env->next_env = NULL;
 	env->queue_num = 0;
+	env->time_in_queue = 0;
 	queue_push(queues, env);
 }
 
@@ -215,6 +216,7 @@ env_MLFQ_destroy(struct Env *env)
 	queue_remove(&queues[env->queue_num], env);
 	env->queue_num = 0;
 	env->next_env = NULL;
+	env->time_in_queue = 0;
 }
 
 // Choose a user environment to run and run it.
