@@ -9,7 +9,10 @@
 // This function does not return.
 void sched_yield(void) __attribute__((noreturn));
 
-// Initialize the scheduler MLFQ
-void sched_init_MLFQ(void);
+// Initialize an Env for MLFQ
+void env_MLFQ_init(struct Env*);
+
+// Remove a free Env from Scheduler
+void env_MLFQ_destroy(struct Env*);
 
 #endif  // !JOS_KERN_SCHED_H

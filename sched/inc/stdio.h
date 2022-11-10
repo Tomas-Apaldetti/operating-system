@@ -4,7 +4,7 @@
 #include <inc/stdarg.h>
 
 #ifndef NULL
-#define NULL	((void *) 0)
+#define NULL	(void *) 0
 #endif /* !NULL */
 
 // lib/stdio.c
