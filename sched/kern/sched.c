@@ -5,7 +5,7 @@
 #include <kern/pmap.h>
 #include <kern/monitor.h>
 
-#define MLFQ_SCHED
+// #define MLFQ_SCHED
 #define NQUEUES 8
 #define MLFQ_LIMIT 3
 #define MLFQ_NPBOOST 15
@@ -40,15 +40,15 @@ sched_round_robin(struct Env *enviroments, int32_t num_envs, struct Env *last_ru
 	struct Env *curr_env;
 
 	if (last_run_env)
-		curr_env = last_run_env + 1;
+		curr_env = last_run_env->next_env;
 	else
 		curr_env = enviroments;
 
-	while (curr_env < enviroments + num_envs) {
+	while (curr_env) {
 		if (curr_env->env_status == ENV_RUNNABLE) {
 			env_run(curr_env);
 		}
-		curr_env = curr_env + 1;
+		curr_env = curr_env->next_env;
 	}
 
 	// if there is no last_run_env, the entire list has been scrolled through
@@ -56,13 +56,13 @@ sched_round_robin(struct Env *enviroments, int32_t num_envs, struct Env *last_ru
 		return;
 
 	curr_env = enviroments;
-	while (curr_env <= last_run_env) {
+	while (curr_env && (curr_env != last_run_env->next_env)) {
 		if ((curr_env->env_status == ENV_RUNNABLE) ||
 		    (curr_env->env_status == ENV_RUNNING &&
 		     curr_env == last_run_env)) {
 			env_run(curr_env);
 		}
-		curr_env = curr_env + 1;
+		curr_env = curr_env->next_env;
 	}
 }
 
@@ -149,6 +149,7 @@ void
 sched_MLFQ(void)
 {
 	schedno++;
+
 	// Check if curenv has to be downgraded
 	if (curenv)
 		env_try_downgrade(curenv);
@@ -164,27 +165,34 @@ sched_MLFQ(void)
 		}
 	}
 
-	// Find next env to run in RR fashion;
+	// Find next env to run in RR fashion
 	for (int32_t i = 0; i < NQUEUES; i++) {
-		struct Env *env;
-		if (curenv && curenv->queue_num == i) {
-			env = curenv;
-			while (env) {
-				if (env->env_status == ENV_RUNNABLE) {
-					env_run(env);
-				}
-				env = env->next_env;
-			}
-		}
-		env = queues[i].envs;
-		while (env && env != curenv) {
-			if (env->env_status == ENV_RUNNABLE) {
-				env_run(env);
-			}
-			env = env->next_env;
-		}
+		// struct Env *env;
+		// if (curenv && curenv->queue_num == i) {
+		// 	env = curenv;
+		// 	while (env) {
+		// 		if (env->env_status == ENV_RUNNABLE) {
+		// 			env_run(env);
+		// 		}
+		// 		env = env->next_env;
+		// 	}
+		// }
+		// env = queues[i].envs;
+		// while (env && env != curenv) {
+		// 	if (env->env_status == ENV_RUNNABLE) {
+		// 		env_run(env);
+		// 	}
+		// 	env = env->next_env;
+		// }
+
+		// if curenv in the current queue, the round robin must start at curenv
+		if (curenv && curenv->queue_num == i)
+			sched_round_robin(queues[i].envs,
+			                  queues[i].num_envs,
+			                  curenv);
+		else
+			sched_round_robin(queues[i].envs, queues[i].num_envs, NULL);
 	}
-	// sched_round_robin(queues[i].envs, queues[i].num_envs, curenv);
 
 
 	if (curenv)
