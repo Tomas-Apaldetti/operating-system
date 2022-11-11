@@ -262,6 +262,8 @@ env_alloc(struct Env **newenv_store, envid_t parent_id)
 	*newenv_store = e;
 
 	cprintf("[%08x] new env %08x\n", curenv ? curenv->env_id : 0, e->env_id);
+	sched_create_env(e);
+
 	return 0;
 }
 
@@ -395,8 +397,6 @@ env_create(uint8_t *binary, enum EnvType type)
 	int err = env_alloc(&env, 0x0);
 	if (err < 0)
 		panic("env_create: %e\n", err);
-
-	sched_create_env(env);
 
 	load_icode(env, binary);
 	env->env_type = type;

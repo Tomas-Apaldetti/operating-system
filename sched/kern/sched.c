@@ -80,7 +80,7 @@ queue_remove_rec(queue_t *queue,
 	if (curr_env == env_to_rmv) {
 		if (queue->last_env == env_to_rmv) {
 			if (prev_env) {
-				prev_env->next_env = curr_env->next_env;
+				prev_env->next_env = NULL;
 			}
 
 			queue->last_env = prev_env;
@@ -89,15 +89,20 @@ queue_remove_rec(queue_t *queue,
 		return curr_env->next_env;
 	}
 
-	return queue_remove_rec(queue, curr_env, curr_env->next_env, env_to_rmv);
+	curr_env->next_env =
+	        queue_remove_rec(queue, curr_env, curr_env->next_env, env_to_rmv);
+	return curr_env;
 }
 
 void
 print_queue(queue_t *queue)
 {
-	struct Env *curr_env = queue->envsenvs;
+	struct Env *curr_env = queue->envs;
+	cprintf("\n|");
+
 	while (curr_env) {
-		cprintf("%p -> %p |", curr_env, curr_env->next_env);
+		cprintf("| %p -> %p ||", curr_env, curr_env->next_env);
+		curr_env = curr_env->next_env;
 	}
 	cprintf("\n");
 }
@@ -105,32 +110,11 @@ print_queue(queue_t *queue)
 void
 queue_remove(queue_t *queue, struct Env *env_to_rmv)
 {
+	print_queue(queue);
+	log_queue(queue[0]);
+
 	queue->envs = queue_remove_rec(queue, NULL, queue->envs, env_to_rmv);
 	queue->num_envs--;
-
-	// struct Env *curr_env = queue->envs;
-	// struct Env *prev_env = NULL;
-
-	// while (curr_env) {
-	// 	if (env_to_rmv == curr_env) {
-	// 		// Remove from queue, treating it as a list
-	// 		if (prev_env) {
-	// 			prev_env->next_env = curr_env->next_env;
-	// 		} else {
-	// 			queue->envs = curr_env->next_env;
-	// 		}
-
-	// 		if (curr_env == queue->last_env) {
-	// 			queue->last_env = curr_env->next_env;
-	// 		}
-
-	// 		queue->num_envs--;
-	// 		return;
-	// 	}
-
-	// 	prev_env = curr_env;
-	// 	curr_env = curr_env->next_env;
-	// }
 }
 
 struct Env *
@@ -150,26 +134,14 @@ queue_pop(queue_t *queue)
 void
 queue_push(queue_t *queue, struct Env *env)
 {
-	// struct Env *last = queue->last_env;
-	// if (!last) {
-	// 	queue->envs = env;
-	// 	last = env;
-	// }
-
-	// last->next_env = env;
-	// env->next_env = NULL;
-
-	// queue->last_env = env;
-
-	//
 	if (queue->num_envs == 0) {
 		queue->envs = env;
 	} else {
 		queue->last_env->next_env = env;
 	}
 	queue->last_env = env;
-	queue->num_envs += 1;
 	env->next_env = NULL;
+	queue->num_envs += 1;
 }
 
 void
