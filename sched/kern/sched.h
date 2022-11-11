@@ -10,9 +10,9 @@
 void sched_yield(void) __attribute__((noreturn));
 
 // Initialize an Env for MLFQ
-void sched_create_env(struct Env *);
+void sched_alloc_env(struct Env *);
 
 // Remove a free Env from Scheduler
-void sched_destroy_env(struct Env *);
+void sched_free_env(struct Env *);
 
 #endif  // !JOS_KERN_SCHED_H

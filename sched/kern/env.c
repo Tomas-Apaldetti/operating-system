@@ -262,7 +262,7 @@ env_alloc(struct Env **newenv_store, envid_t parent_id)
 	*newenv_store = e;
 
 	cprintf("[%08x] new env %08x\n", curenv ? curenv->env_id : 0, e->env_id);
-	sched_create_env(e);
+	sched_alloc_env(e);
 
 	return 0;
 }
@@ -452,6 +452,8 @@ env_free(struct Env *e)
 	e->env_status = ENV_FREE;
 	e->env_link = env_free_list;
 	env_free_list = e;
+
+	sched_free_env(e);
 }
 
 //
@@ -471,7 +473,6 @@ env_destroy(struct Env *e)
 	}
 
 	env_free(e);
-	sched_destroy_env(e);
 
 	if (curenv == e) {
 		// cprintf("[%08x] env_destroy %08x\n", curenv ? curenv->env_id : 0, e->env_id);

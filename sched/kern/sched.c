@@ -5,10 +5,10 @@
 #include <kern/pmap.h>
 #include <kern/monitor.h>
 
-// #define MLFQ_SCHED
+#define MLFQ_SCHED
 #define NQUEUES 8
-#define MLFQ_LIMIT 3
-#define MLFQ_NPBOOST 15
+#define MLFQ_LIMIT 1
+#define MLFQ_NPBOOST 5
 
 typedef struct queue {
 	struct Env *envs;
@@ -110,9 +110,6 @@ print_queue(queue_t *queue)
 void
 queue_remove(queue_t *queue, struct Env *env_to_rmv)
 {
-	print_queue(queue);
-	log_queue(queue[0]);
-
 	queue->envs = queue_remove_rec(queue, NULL, queue->envs, env_to_rmv);
 	queue->num_envs--;
 }
@@ -120,15 +117,16 @@ queue_remove(queue_t *queue, struct Env *env_to_rmv)
 struct Env *
 queue_pop(queue_t *queue)
 {
-	struct Env *ret = queue->envs;
-	if (!ret)
-		return NULL;
-	queue->envs = ret->next_env;
 	if (!queue->envs) {
-		queue->last_env = NULL;
+		cprintf("CANTIDAD %d\n", queue->num_envs);
+		return NULL;
 	}
-	queue->num_envs -= 1;
-	return ret;
+
+	struct Env *env_to_rmv = queue->envs;
+	queue_remove(queue, env_to_rmv);
+	log_queue(*queue);
+	print_queue(queue);
+	return env_to_rmv;
 }
 
 void
@@ -161,8 +159,10 @@ env_change_priority(struct Env *env, int32_t new_priority)
 void
 env_try_downgrade(struct Env *env)
 {
-	if (env->env_runs > MLFQ_LIMIT && env->queue_num < NQUEUES - 1)
-		env_change_priority(env, env->queue_num - 1);
+	if (env->env_runs > MLFQ_LIMIT && env->queue_num < NQUEUES - 1) {
+		env_change_priority(env, env->queue_num + 1);
+		env->env_runs = 0;
+	}
 }
 
 void
@@ -175,37 +175,21 @@ sched_MLFQ(void)
 		env_try_downgrade(curenv);
 
 	// Check if we need to boost priorities
-	if (schedno == MLFQ_NPBOOST) {
-		schedno = 0;  // Reset boost counter
-		for (int i = 1; i < NQUEUES; i++) {
-			struct Env *env;
-			while ((env = queue_pop(&queues[i]))) {
-				queue_push(&queues[0], env);
-			}
-		}
-	}
+
+	// if (schedno == MLFQ_NPBOOST) {
+	// 	schedno = 0;  // Reset boost counter
+	// 	for (int i = 1; i < NQUEUES; i++) {
+	// 		struct Env *env = queue_pop(&queues[i]);
+	// 		while (env) {
+	// 			queue_push(queues, env);
+	// 			env = queue_pop(&queues[i]);
+	// 		}
+	// 	}
+	// }
 
 	// Find next env to run in RR fashion
 	for (int32_t i = 0; i < NQUEUES; i++) {
-		// struct Env *env;
-		// if (curenv && curenv->queue_num == i) {
-		// 	env = curenv;
-		// 	while (env) {
-		// 		if (env->env_status == ENV_RUNNABLE) {
-		// 			env_run(env);
-		// 		}
-		// 		env = env->next_env;
-		// 	}
-		// }
-		// env = queues[i].envs;
-		// while (env && env != curenv) {
-		// 	if (env->env_status == ENV_RUNNABLE) {
-		// 		env_run(env);
-		// 	}
-		// 	env = env->next_env;
-		// }
-
-		// if curenv in the current queue, the round robin must start at curenv
+		// if curenv is on the current queue, the round robin must start at curenv
 		if (curenv && curenv->queue_num == i)
 			sched_round_robin(queues[i].envs,
 			                  queues[i].num_envs,
@@ -213,16 +197,10 @@ sched_MLFQ(void)
 		else
 			sched_round_robin(queues[i].envs, queues[i].num_envs, NULL);
 	}
-
-
-	if (curenv)
-		env_run(curenv);
-
-	// If we get here, there are not runnable envs, just return for sched_halt
 }
 
 void
-sched_create_env(struct Env *env)
+sched_alloc_env(struct Env *env)
 {
 	env->next_env = NULL;
 	env->queue_num = 0;
@@ -231,7 +209,7 @@ sched_create_env(struct Env *env)
 }
 
 void
-sched_destroy_env(struct Env *env)
+sched_free_env(struct Env *env)
 {
 	queue_remove(&queues[env->queue_num], env);
 
