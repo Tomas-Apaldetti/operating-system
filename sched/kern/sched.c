@@ -7,8 +7,8 @@
 
 #define MLFQ_SCHED
 #define NQUEUES 8
-#define MLFQ_LIMIT 1
-#define MLFQ_NPBOOST 5
+#define MLFQ_PLIMIT 2
+#define MLFQ_NPBOOST 10
 
 typedef struct queue {
 	struct Env *envs;
@@ -67,6 +67,19 @@ sched_round_robin(struct Env *enviroments, int32_t num_envs, struct Env *last_ru
 	}
 }
 
+void
+print_queue(queue_t *queue)
+{
+	struct Env *curr_env = queue->envs;
+	cprintf("\n|");
+
+	while (curr_env) {
+		cprintf("| %p -> %p ||", curr_env, curr_env->next_env);
+		curr_env = curr_env->next_env;
+	}
+	cprintf("\n");
+}
+
 struct Env *
 queue_remove_rec(queue_t *queue,
                  struct Env *prev_env,
@@ -94,18 +107,6 @@ queue_remove_rec(queue_t *queue,
 	return curr_env;
 }
 
-void
-print_queue(queue_t *queue)
-{
-	struct Env *curr_env = queue->envs;
-	cprintf("\n|");
-
-	while (curr_env) {
-		cprintf("| %p -> %p ||", curr_env, curr_env->next_env);
-		curr_env = curr_env->next_env;
-	}
-	cprintf("\n");
-}
 
 void
 queue_remove(queue_t *queue, struct Env *env_to_rmv)
@@ -145,23 +146,58 @@ queue_push(queue_t *queue, struct Env *env)
 void
 env_change_priority(struct Env *env, int32_t new_priority)
 {
-	queue_t *queue = &queues[env->queue_num];
+	if ((new_priority <= env->queue_num) || (new_priority >= NQUEUES)) {
+		return;
+	}
 
-	queue_remove(queue, env);
+	queue_t *prev_queue = &queues[env->queue_num];
+	queue_t *new_queue = &queues[new_priority];
 
+	queue_remove(prev_queue, env);
 	env->queue_num = new_priority;
-
-	queue_t *new_queue = &queues[env->queue_num];
-
 	queue_push(new_queue, env);
 }
 
-void
-env_try_downgrade(struct Env *env)
+bool
+should_env_downgrade(struct Env *env)
 {
-	if (env->env_runs > MLFQ_LIMIT && env->queue_num < NQUEUES - 1) {
-		env_change_priority(env, env->queue_num + 1);
-		env->env_runs = 0;
+	return (env && (env->env_runs > MLFQ_PLIMIT));
+}
+
+void
+downgrade_env(struct Env *env)
+{
+	env_change_priority(env, env->queue_num + 1);
+	// capaz el env tendria que volver a cero porque sino caen en cascada
+	env->env_runs = 0;
+}
+
+bool
+should_boost()
+{
+	return (schedno >= MLFQ_NPBOOST);
+}
+
+void
+boost()
+{
+	schedno = 0;
+	struct Env *curr_env;
+	struct Env *next_env;
+
+	for (int i = 1; i < NQUEUES; i++) {
+		curr_env = queues[i].envs;
+		while (curr_env) {
+			next_env = curr_env->next_env;
+			queue_remove(queues + i, curr_env);
+			curr_env->env_runs = 0;
+			queue_push(queues, curr_env);
+
+			curr_env = next_env;
+			// cprintf("COLA %d", i);
+			// print_queue(queues + i);
+			// print_queue(queues);
+		}
 	}
 }
 
@@ -171,21 +207,11 @@ sched_MLFQ(void)
 	schedno++;
 
 	// Check if curenv has to be downgraded
-	if (curenv)
-		env_try_downgrade(curenv);
+	if (should_env_downgrade(curenv))
+		downgrade_env(curenv);
 
-	// Check if we need to boost priorities
-
-	// if (schedno == MLFQ_NPBOOST) {
-	// 	schedno = 0;  // Reset boost counter
-	// 	for (int i = 1; i < NQUEUES; i++) {
-	// 		struct Env *env = queue_pop(&queues[i]);
-	// 		while (env) {
-	// 			queue_push(queues, env);
-	// 			env = queue_pop(&queues[i]);
-	// 		}
-	// 	}
-	// }
+	if (should_boost())
+		boost();
 
 	// Find next env to run in RR fashion
 	for (int32_t i = 0; i < NQUEUES; i++) {
