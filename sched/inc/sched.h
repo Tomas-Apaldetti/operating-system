@@ -5,30 +5,36 @@
 #define TCCR    (0x0390/4)   // Timer Current Count
 
 #define NQUEUES 8
-#define MLFQ_BOOST 100
+#define MLFQ_BOOST_AMNT 50
 #define MLFQ_BASE_TIMER 500000
+#define MLFQ_BOOST MLFQ_BASE_TIMER * MLFQ_BOOST_AMNT
 
-// Limit of time for a given priority
-#define MLFQ_BASE_LIMIT(prio) MLFQ_BASE_TIMER * 4
 // Timer for a given priority
 #define MLFQ_TIMER(prio) MLFQ_BASE_TIMER 
 
-// Count time for a given priority, if the process is in the last Queue, no counting is needed
-#define TIMER_COUNT(prio) prio == NQUEUES - 1 ? 0 : MLFQ_TIMER(prio) - lapicr(TCCR)
-
 // Set the timer for a given priority
-#define TIMER_RESET(prio) lapicwr(TICR, MLFQ_TIMER(prio))
+#define TIMER_SET(remaining) lapicwr(TICR, remaining)
 
 // Stops the LAPIC Timer
 #define TIMER_STOP lapicwr(TICR, 0);
 
 // Count the time for a given environment
-#define MLFQ_TIME_COUNT(env) env->time_in_queue += TIMER_COUNT(env->queue_num)
+#define MLFQ_TIME_COUNT(env) {                                      \
+    unsigned t = lapicr(TCCR);                                      \
+    unsigned it = lapicr(TICR);                                     \
+    mlfq_time_count += it - t;                                      \
+    if (env)                                                        \
+        env->time_remaining = t;                                    \
+}
 
 // Reset the time for a given environment
-#define MLFQ_TIME_RESET(env) env->time_in_queue = 0
+#define MLFQ_TIME_RESET(env) env->time_remaining = 0
 
 // Check if the time is over the limit for a given environment
-#define MLFQ_OVER_LIMIT(env) env->time_in_queue >= MLFQ_BASE_LIMIT(env->queue_num)
+#define MLFQ_TQ_OVER(env) env->time_remaining == 0
+
+#define MLFQ_BOOST_RESET mlfq_time_count = 0
+
+extern uint32_t mlfq_time_count;
 
 #endif /* !JOS_INC_SCHED_H */

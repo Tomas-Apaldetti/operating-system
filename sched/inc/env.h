@@ -63,7 +63,7 @@ struct Env {
 	// MLFQ sched
 	int32_t queue_num;
 	struct Env *next_env;
-	int32_t time_in_queue;
+	int32_t time_remaining;
 };
 
 #endif  // !JOS_INC_ENV_H

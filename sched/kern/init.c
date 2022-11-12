@@ -17,7 +17,6 @@
 
 static void boot_aps(void);
 
-
 void
 i386_init(void)
 {
@@ -68,15 +67,12 @@ i386_init(void)
 		ENV_CREATE(TEST, ENV_TYPE_USER);
 #else
 	// Touch all you want.
-	ENV_CREATE(user_spin0, ENV_TYPE_USER);
-	ENV_CREATE(user_spin0, ENV_TYPE_USER);
+	ENV_CREATE(user_dumbfork, ENV_TYPE_USER);
+	ENV_CREATE(user_dumbfork, ENV_TYPE_USER);
 
 #endif  // TEST*
 
 // Schedule and run the first user environment!
-#if defined(MLFQ_SHED)
-	sched_init_MLFQ();
-#endif
 
 	sched_yield();
 }

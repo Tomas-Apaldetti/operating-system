@@ -8,6 +8,7 @@
 
 #define MLFQ_SCHED
 
+uint32_t mlfq_time_count = 0;
 typedef struct queue {
 	struct Env *envs;
 	struct Env *last_env;
@@ -45,6 +46,7 @@ sched_round_robin(struct Env *enviroments, int32_t num_envs, struct Env *last_ru
 
 	while (curr_env) {
 		if (curr_env->env_status == ENV_RUNNABLE) {
+			curr_env->time_remaining = MLFQ_TIMER(curr_env->queue_num);
 			env_run(curr_env);
 		}
 		curr_env = curr_env->next_env;
@@ -59,6 +61,7 @@ sched_round_robin(struct Env *enviroments, int32_t num_envs, struct Env *last_ru
 		if ((curr_env->env_status == ENV_RUNNABLE) ||
 		    (curr_env->env_status == ENV_RUNNING &&
 		     curr_env == last_run_env)) {
+			curr_env->time_remaining = MLFQ_TIMER(curr_env->queue_num);
 			env_run(curr_env);
 		}
 		curr_env = curr_env->next_env;
@@ -178,7 +181,7 @@ env_change_priority(struct Env *env, int32_t new_priority)
 bool
 should_env_downgrade(struct Env *env)
 {
-	return env && env->queue_num < NQUEUES - 1 && MLFQ_OVER_LIMIT(env);
+	return env && env->queue_num < NQUEUES - 1 && MLFQ_TQ_OVER(env);
 }
 
 void
@@ -197,7 +200,7 @@ should_boost()
 void
 boost()
 {
-	schedno = 0;
+	MLFQ_BOOST_RESET;
 	struct Env *curr_env;
 	struct Env *next_env;
 
@@ -211,8 +214,6 @@ boost()
 void
 sched_MLFQ(void)
 {
-	schedno++;
-
 	// Check if curenv has to be downgraded
 	if (should_env_downgrade(curenv)) {
 		downgrade_env(curenv);

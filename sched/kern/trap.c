@@ -245,10 +245,7 @@ trap_dispatch(struct Trapframe *tf)
 void
 trap(struct Trapframe *tf)
 {
-	if (curenv) {
-		MLFQ_TIME_COUNT(curenv);
-	}
-	TIMER_STOP;
+	MLFQ_TIME_COUNT(curenv);
 	// The environment may have set DF and some versions
 	// of GCC rely on DF being clear
 	asm volatile("cld" ::: "cc");
