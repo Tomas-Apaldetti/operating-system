@@ -1,14 +1,12 @@
 #include <inc/assert.h>
 #include <inc/x86.h>
+#include <inc/sched.h>
 #include <kern/spinlock.h>
 #include <kern/env.h>
 #include <kern/pmap.h>
 #include <kern/monitor.h>
 
 #define MLFQ_SCHED
-#define NQUEUES 8
-#define MLFQ_PLIMIT 2
-#define MLFQ_NPBOOST 10
 
 typedef struct queue {
 	struct Env *envs;
@@ -28,7 +26,7 @@ void sched_round_robin(struct Env *enviroments,
 void sched_MLFQ(void);
 
 void
-log_queue(queue_t* queue)
+log_queue(queue_t *queue)
 {
 	cprintf("Puntero envs: %x\n", queue->envs);
 	cprintf("Puntero last_env: %x\n", queue->last_env);
@@ -111,24 +109,23 @@ queue_remove_rec(queue_t *queue,
 void
 queue_remove(queue_t *queue, struct Env *env)
 {
-	if(!env || !queue) return;
+	if (!env || !queue)
+		return;
 
 	struct Env *prev = NULL;
 	struct Env *curr = queue->envs;
 
-	while(curr){
-
-		if(curr == env){
-
-			if(env == queue->envs){
+	while (curr) {
+		if (curr == env) {
+			if (env == queue->envs) {
 				queue->envs = env->next_env;
 			}
 
-			if(env == queue->last_env){
+			if (env == queue->last_env) {
 				queue->last_env = prev;
 			}
 
-			if(prev){
+			if (prev) {
 				prev->next_env = env->next_env;
 			}
 
@@ -147,11 +144,12 @@ queue_remove(queue_t *queue, struct Env *env)
 void
 queue_push(queue_t *queue, struct Env *env)
 {
-	if(!env || !queue) return;
+	if (!env || !queue)
+		return;
 
-	if(!queue->envs){
+	if (!queue->envs) {
 		queue->envs = env;
-	}else{
+	} else {
 		queue->last_env->next_env = env;
 	}
 
@@ -170,9 +168,9 @@ env_change_priority(struct Env *env, int32_t new_priority)
 	queue_t *nqueue = queues + new_priority;
 
 	queue_remove(pqueue, env);
-	
+
 	env->queue_num = new_priority;
-	env->env_runs = 0;
+	MLFQ_TIME_RESET(env);
 
 	queue_push(nqueue, env);
 }
@@ -180,7 +178,7 @@ env_change_priority(struct Env *env, int32_t new_priority)
 bool
 should_env_downgrade(struct Env *env)
 {
-	return env && env->env_runs > MLFQ_PLIMIT && env->queue_num < NQUEUES - 1;
+	return env && env->queue_num < NQUEUES - 1 && MLFQ_OVER_LIMIT(env);
 }
 
 void
@@ -204,10 +202,10 @@ boost()
 	struct Env *next_env;
 
 	for (int i = 1; i < NQUEUES; i++) {
-		while(queues[i].envs){
+		while (queues[i].envs) {
 			env_change_priority(queues[i].envs, 0);
 		}
-	}	
+	}
 }
 
 void
@@ -216,8 +214,11 @@ sched_MLFQ(void)
 	schedno++;
 
 	// Check if curenv has to be downgraded
-	if (should_env_downgrade(curenv))
+	if (should_env_downgrade(curenv)){
+		cprintf("[PID: %d] Going to downgrade from queue n: %d\n", curenv->env_id, curenv->queue_num);
 		downgrade_env(curenv);
+	}
+		
 
 	if (should_boost())
 		boost();
@@ -239,7 +240,7 @@ sched_alloc_env(struct Env *env)
 {
 	env->next_env = NULL;
 	env->queue_num = 0;
-	// TODO: reset counter for MLFQ
+	MLFQ_TIME_RESET(env);
 	queue_push(queues, env);
 }
 
@@ -274,6 +275,12 @@ sched_yield(void)
 	// Your code here
 	sched_round_robin(queues[0].envs, NENV, curenv);
 #endif
+	cprintf("Nothing to schedule\n");
+	for(int i = 0; i < NQUEUES; i++){
+		cprintf("Information of the queue %d\n", i);
+		log_queue(queues + i);
+	}
+
 	sched_halt();
 }
 
@@ -290,8 +297,10 @@ sched_halt(void)
 	for (i = 0; i < NENV; i++) {
 		if ((envs[i].env_status == ENV_RUNNABLE ||
 		     envs[i].env_status == ENV_RUNNING ||
-		     envs[i].env_status == ENV_DYING))
-			break;
+		     envs[i].env_status == ENV_DYING)){
+				break;
+			 }
+			
 	}
 	if (i == NENV) {
 		cprintf("No runnable environments in the system!\n");
