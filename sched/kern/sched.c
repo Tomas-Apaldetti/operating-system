@@ -6,7 +6,23 @@
 #include <kern/pmap.h>
 #include <kern/monitor.h>
 
-#define MLFQ_SCHED
+// #define MLFQ_SCHED
+
+#define NDWN_CALLS 1024
+
+typedef struct sched_stats {
+	size_t sched_calls;
+	size_t boost_calls;
+	envid_t downgrade_calls[NDWN_CALLS];
+	int num_downgrade_calls;
+	envid_t env_run_calls[NDWN_CALLS];
+	int num_env_run_calls;
+} sched_stats_t;
+
+sched_stats_t stats = { .sched_calls = 0,
+	                .boost_calls = 0,
+	                .num_downgrade_calls = 0,
+	                .num_env_run_calls = 0 };
 
 uint32_t mlfq_time_count = 0;
 typedef struct queue {
@@ -46,7 +62,8 @@ sched_round_robin(struct Env *enviroments, int32_t num_envs, struct Env *last_ru
 
 	while (curr_env) {
 		if (curr_env->env_status == ENV_RUNNABLE) {
-			curr_env->time_remaining = MLFQ_TIMER(curr_env->queue_num);
+			curr_env->time_remaining =
+			        MLFQ_TIMER(curr_env->queue_num);
 			env_run(curr_env);
 		}
 		curr_env = curr_env->next_env;
@@ -61,7 +78,8 @@ sched_round_robin(struct Env *enviroments, int32_t num_envs, struct Env *last_ru
 		if ((curr_env->env_status == ENV_RUNNABLE) ||
 		    (curr_env->env_status == ENV_RUNNING &&
 		     curr_env == last_run_env)) {
-			curr_env->time_remaining = MLFQ_TIMER(curr_env->queue_num);
+			curr_env->time_remaining =
+			        MLFQ_TIMER(curr_env->queue_num);
 			env_run(curr_env);
 		}
 		curr_env = curr_env->next_env;
@@ -220,10 +238,10 @@ sched_MLFQ(void)
 	}
 
 
-	if (should_boost()){
+	if (should_boost()) {
 		boost();
 	}
-		
+
 
 	// Find next env to run in RR fashion
 	for (int32_t i = 0; i < NQUEUES; i++) {
