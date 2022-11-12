@@ -191,7 +191,7 @@ downgrade_env(struct Env *env)
 bool
 should_boost()
 {
-	return (schedno >= MLFQ_NPBOOST);
+	return (schedno >= MLFQ_BOOST);
 }
 
 void
