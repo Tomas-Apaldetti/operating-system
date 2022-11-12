@@ -185,7 +185,7 @@ void
 downgrade_env(struct Env *env)
 {
 	env_change_priority(env, env->queue_num + 1);
-	env->env_runs = 0;
+	MLFQ_TIME_RESET(env);
 }
 
 bool
@@ -214,14 +214,15 @@ sched_MLFQ(void)
 	schedno++;
 
 	// Check if curenv has to be downgraded
-	if (should_env_downgrade(curenv)){
-		cprintf("[PID: %d] Going to downgrade from queue n: %d\n", curenv->env_id, curenv->queue_num);
+	if (should_env_downgrade(curenv)) {
 		downgrade_env(curenv);
 	}
-		
 
-	if (should_boost())
+
+	if (should_boost()){
 		boost();
+	}
+		
 
 	// Find next env to run in RR fashion
 	for (int32_t i = 0; i < NQUEUES; i++) {
@@ -275,12 +276,6 @@ sched_yield(void)
 	// Your code here
 	sched_round_robin(queues[0].envs, NENV, curenv);
 #endif
-	cprintf("Nothing to schedule\n");
-	for(int i = 0; i < NQUEUES; i++){
-		cprintf("Information of the queue %d\n", i);
-		log_queue(queues + i);
-	}
-
 	sched_halt();
 }
 
@@ -297,10 +292,9 @@ sched_halt(void)
 	for (i = 0; i < NENV; i++) {
 		if ((envs[i].env_status == ENV_RUNNABLE ||
 		     envs[i].env_status == ENV_RUNNING ||
-		     envs[i].env_status == ENV_DYING)){
-				break;
-			 }
-			
+		     envs[i].env_status == ENV_DYING)) {
+			break;
+		}
 	}
 	if (i == NENV) {
 		cprintf("No runnable environments in the system!\n");

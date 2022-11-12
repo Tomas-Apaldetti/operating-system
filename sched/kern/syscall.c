@@ -4,6 +4,7 @@
 #include <inc/error.h>
 #include <inc/string.h>
 #include <inc/assert.h>
+#include <inc/sched.h>
 
 #include <kern/env.h>
 #include <kern/pmap.h>
@@ -152,7 +153,10 @@ sys_exofork(void)
 	newenv->env_status = ENV_NOT_RUNNABLE;
 	newenv->env_tf = curenv->env_tf;
 	newenv->env_tf.tf_regs.reg_eax = 0;
-	env_change_priority(newenv, curenv->queue_num - 1);
+	env_change_priority(newenv,
+	                    curenv->queue_num == NQUEUES - 1
+	                            ? curenv->queue_num
+	                            : curenv->queue_num + 1);
 	return newenv->env_id;
 	// panic("sys_exofork not implemented");
 }

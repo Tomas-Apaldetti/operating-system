@@ -247,11 +247,6 @@ trap(struct Trapframe *tf)
 {
 	if (curenv) {
 		MLFQ_TIME_COUNT(curenv);
-		cprintf("[PID: %d]Accumulated time in env: %d, that is in "
-		        "queue: %d\n",
-		        curenv->env_id,
-		        curenv->time_in_queue,
-		        curenv->queue_num);
 	}
 	TIMER_STOP;
 	// The environment may have set DF and some versions

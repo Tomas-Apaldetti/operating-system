@@ -5,8 +5,8 @@
 #define TCCR    (0x0390/4)   // Timer Current Count
 
 #define NQUEUES 8
-#define MLFQ_NPBOOST 50
-#define MLFQ_BASE_TIMER 2000000
+#define MLFQ_NPBOOST 10
+#define MLFQ_BASE_TIMER 100000
 
 #define MLFQ_BASE_LIMIT(prio) MLFQ_BASE_TIMER
 #define MLFQ_TIMER(prio) (MLFQ_BASE_TIMER)
