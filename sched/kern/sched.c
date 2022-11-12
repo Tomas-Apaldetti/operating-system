@@ -28,11 +28,11 @@ void sched_round_robin(struct Env *enviroments,
 void sched_MLFQ(void);
 
 void
-log_queue(queue_t queue)
+log_queue(queue_t* queue)
 {
-	cprintf("Puntero envs: %x\n", queue.envs);
-	cprintf("Puntero last_env: %x\n", queue.last_env);
-	cprintf("Cantidad de envs: %d\n", queue.num_envs);
+	cprintf("Puntero envs: %x\n", queue->envs);
+	cprintf("Puntero last_env: %x\n", queue->last_env);
+	cprintf("Cantidad de envs: %d\n", queue->num_envs);
 }
 
 void
@@ -109,66 +109,84 @@ queue_remove_rec(queue_t *queue,
 
 
 void
-queue_remove(queue_t *queue, struct Env *env_to_rmv)
+queue_remove(queue_t *queue, struct Env *env)
 {
-	queue->envs = queue_remove_rec(queue, NULL, queue->envs, env_to_rmv);
-	queue->num_envs--;
-}
+	if(!env || !queue) return;
 
-struct Env *
-queue_pop(queue_t *queue)
-{
-	if (!queue->envs) {
-		cprintf("CANTIDAD %d\n", queue->num_envs);
-		return NULL;
+	struct Env *prev = NULL;
+	struct Env *curr = queue->envs;
+
+	while(curr){
+
+		if(curr == env){
+
+			if(env == queue->envs){
+				queue->envs = env->next_env;
+			}
+
+			if(env == queue->last_env){
+				queue->last_env = prev;
+			}
+
+			if(prev){
+				prev->next_env = env->next_env;
+			}
+
+			queue->num_envs--;
+
+			env->next_env = NULL;
+
+			return;
+		}
+
+		prev = curr;
+		curr = curr->next_env;
 	}
-
-	struct Env *env_to_rmv = queue->envs;
-	queue_remove(queue, env_to_rmv);
-	log_queue(*queue);
-	print_queue(queue);
-	return env_to_rmv;
 }
 
 void
 queue_push(queue_t *queue, struct Env *env)
 {
-	if (queue->num_envs == 0) {
+	if(!env || !queue) return;
+
+	if(!queue->envs){
 		queue->envs = env;
-	} else {
+	}else{
 		queue->last_env->next_env = env;
 	}
+
 	queue->last_env = env;
 	env->next_env = NULL;
-	queue->num_envs += 1;
+	queue->num_envs++;
 }
 
 void
 env_change_priority(struct Env *env, int32_t new_priority)
 {
-	if ((new_priority <= env->queue_num) || (new_priority >= NQUEUES)) {
+	if (new_priority >= NQUEUES) {
 		return;
 	}
+	queue_t *pqueue = queues + env->queue_num;
+	queue_t *nqueue = queues + new_priority;
 
-	queue_t *prev_queue = &queues[env->queue_num];
-	queue_t *new_queue = &queues[new_priority];
-
-	queue_remove(prev_queue, env);
+	queue_remove(pqueue, env);
+	
 	env->queue_num = new_priority;
-	queue_push(new_queue, env);
+	env->env_runs = 0;
+
+	queue_push(nqueue, env);
 }
 
 bool
 should_env_downgrade(struct Env *env)
 {
-	return (env && (env->env_runs > MLFQ_PLIMIT));
+	return env && env->env_runs > MLFQ_PLIMIT && env->queue_num < NQUEUES - 1;
 }
 
 void
 downgrade_env(struct Env *env)
 {
 	env_change_priority(env, env->queue_num + 1);
-	// capaz el env tendria que volver a cero porque sino caen en cascada
 	env->env_runs = 0;
 }
 
@@ -186,19 +204,10 @@ boost()
 	struct Env *next_env;
 
 	for (int i = 1; i < NQUEUES; i++) {
-		curr_env = queues[i].envs;
-		while (curr_env) {
-			next_env = curr_env->next_env;
-			queue_remove(queues + i, curr_env);
-			curr_env->env_runs = 0;
-			queue_push(queues, curr_env);
-
-			curr_env = next_env;
-			// cprintf("COLA %d", i);
-			// print_queue(queues + i);
-			// print_queue(queues);
+		while(queues[i].envs){
+			env_change_priority(queues[i].envs, 0);
 		}
-	}
+	}	
 }
 
 void
@@ -230,17 +239,14 @@ sched_alloc_env(struct Env *env)
 {
 	env->next_env = NULL;
 	env->queue_num = 0;
-
+	// TODO: reset counter for MLFQ
 	queue_push(queues, env);
 }
 
 void
 sched_free_env(struct Env *env)
 {
-	queue_remove(&queues[env->queue_num], env);
-
-	env->queue_num = 0;
-	env->next_env = NULL;
+	queue_remove(queues + env->queue_num, env);
 }
 
 // Choose a user environment to run and run it.
