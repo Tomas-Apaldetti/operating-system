@@ -13,7 +13,6 @@
 #include <kern/console.h>
 #include <kern/sched.h>
 
-
 static int
 check_perm(int perm, pte_t *pte)
 {
@@ -153,14 +152,12 @@ sys_exofork(void)
 	newenv->env_status = ENV_NOT_RUNNABLE;
 	newenv->env_tf = curenv->env_tf;
 	newenv->env_tf.tf_regs.reg_eax = 0;
+
 #ifdef MLFQ_SCHED
-	env_change_priority(newenv,
-	                    curenv->queue_num == NQUEUES - 1
-	                            ? curenv->queue_num
-	                            : curenv->queue_num + 1);
+	env_change_priority(newenv, curenv->queue_num);
 #endif
+
 	return newenv->env_id;
-	// panic("sys_exofork not implemented");
 }
 
 // Set envid's env_status to status, which must be ENV_RUNNABLE
@@ -440,17 +437,17 @@ sys_ipc_recv(void *dstva)
 /// @param env_id 	ID of the environment
 /// @param new_prio New priority for the environment, it must be the same as the
 /// current one or less. (Range between 0 and 8)
-/// @return -E_INVAL if priority is not possible or is bigger than current priority
-///			-E_BAD_ENV if environment is not the caller or an inmediate child
+/// @return -E_INVAL if priority is not possible or is bigger than current priority.
+///			-E_BAD_ENV if environment is not the caller or an inmediate child.
 /// 		0 on success
 static int
 sys_change_prio(envid_t env_id, int new_prio)
 {
 #ifdef MLFQ_SCHED
 	struct Env *env;
-	int r;
-	if ((r = envid2env(env_id, &env, true)))
-		return r;
+	int err;
+	if ((err = envid2env(env_id, &env, true)))
+		return err;
 
 	bool in_range = new_prio >= 0 && new_prio < NQUEUES;
 
@@ -462,7 +459,7 @@ sys_change_prio(envid_t env_id, int new_prio)
 
 	env_change_priority(env, new_prio);
 #endif
-	return 0;
+	return -E_INVAL;
 }
 
 /// @brief See the priority of an existing environment
@@ -473,9 +470,9 @@ static int
 sys_see_prio(envid_t env_id)
 {
 	struct Env *env;
-	int r;
-	if ((r = envid2env(env_id, &env, false)))
-		return r;
+	int err;
+	if ((err = envid2env(env_id, &env, false)))
+		return err;
 
 	return env->queue_num;
 }

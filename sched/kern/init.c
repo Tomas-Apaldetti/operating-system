@@ -76,8 +76,7 @@ i386_init(void)
 
 #endif  // TEST*
 
-// Schedule and run the first user environment!
-
+	// Schedule and run the first user environment!
 	sched_yield();
 }
 
