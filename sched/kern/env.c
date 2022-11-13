@@ -529,6 +529,7 @@ env_run(struct Env *e)
 	//	e->env_tf to sensible values.
 	// Your code here
 	env_switch(e);
+	TIMER_SET(curenv->time_remaining);
 
 	// Needed if we run with multiple procesors
 	// Record the CPU we are running on for user-space debugging
@@ -539,6 +540,5 @@ env_run(struct Env *e)
 	//	   registers and drop into user mode in the
 	//	   environment.
 	// Your code here
-	TIMER_SET(curenv->time_remaining);
 	context_switch(&e->env_tf);
 }

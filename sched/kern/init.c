@@ -70,6 +70,9 @@ i386_init(void)
 	// ENV_CREATE(user_priority, ENV_TYPE_USER);
 	// ENV_CREATE(user_hello, ENV_TYPE_USER);
 	ENV_CREATE(user_stresssched, ENV_TYPE_USER);
+	// ENV_CREATE(user_stresssched, ENV_TYPE_USER);
+	// ENV_CREATE(user_stresssched, ENV_TYPE_USER);
+	// ENV_CREATE(user_stresssched, ENV_TYPE_USER);
 
 #endif  // TEST*
 

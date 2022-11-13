@@ -181,20 +181,6 @@ def test_primes():
             E("CPU .: 1877 .$E289. new env $E290"))
 
 
-# @test(1)
-# def test_primes():
-#     r.user_test("primes", stop_on_line("CPU .: 1877"), stop_on_line(".*panic"),
-#                 make_args=["CPUS=4"], timeout=60)
-#     r.match(E(".00000000. new env $E1"),
-#             E(".$E1. new env $E2"),
-#             E("CPU .: 2 .$E2. new env $E3"),
-#             E("CPU .: 3 .$E3. new env $E4"),
-#             E("CPU .: 5 .$E4. new env $E5"),
-#             E("CPU .: 7 .$E5. new env $E6"),
-#             E("CPU .: 11 .$E6. new env $E7"),
-#             E("CPU .: 1877 .$E289. new env $E290"))
-
-
 end_part("4")
 
 

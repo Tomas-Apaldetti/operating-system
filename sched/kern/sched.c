@@ -215,8 +215,6 @@ sched_free_env(struct Env *env)
 void
 sched_yield(void)
 {
-	stats.sched_calls++;
-
 #ifdef MLFQ_SCHED
 	sched_MLFQ();
 #else
