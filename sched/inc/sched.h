@@ -5,10 +5,11 @@
 #define TCCR (0x0390 / 4)  // Timer Current Count
 
 #define NQUEUES 8
-#define MLFQ_BOOST_AMNT 10
+#define MLFQ_BOOST_AMNT 15
 #define MLFQ_BASE_TIMER 10000000
 #define MLFQ_MIN_THRESHOLD MLFQ_BASE_TIMER * 0.1
 #define MLFQ_BOOST MLFQ_BASE_TIMER *MLFQ_BOOST_AMNT
+#define CPU_TIME_HALT 500000
 
 // Timer for a given priority
 #define MLFQ_TIMER(prio) MLFQ_BASE_TIMER

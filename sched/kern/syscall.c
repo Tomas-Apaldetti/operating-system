@@ -158,7 +158,6 @@ sys_exofork(void)
 #endif
 
 	return newenv->env_id;
-	// panic("sys_exofork not implemented");
 }
 
 // Set envid's env_status to status, which must be ENV_RUNNABLE
