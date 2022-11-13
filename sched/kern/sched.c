@@ -6,8 +6,6 @@
 #include <kern/pmap.h>
 #include <kern/monitor.h>
 
-#define MLFQ_SCHED
-
 #define NDWN_CALLS 1024
 
 typedef struct sched_stats {

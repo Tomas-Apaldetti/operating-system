@@ -66,8 +66,13 @@ i386_init(void)
 	if (TESTED(user_yield) || TESTED(user_spin0))
 		ENV_CREATE(TEST, ENV_TYPE_USER);
 #else
+
+#ifdef MLFQ_SCHED
 	// Touch all you want.
 	ENV_CREATE(user_priority, ENV_TYPE_USER);
+#else
+	ENV_CREATE(user_dumbfork, ENV_TYPE_USER);
+#endif
 
 #endif  // TEST*
 

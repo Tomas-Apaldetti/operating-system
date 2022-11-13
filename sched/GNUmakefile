@@ -89,10 +89,10 @@ PERL	:= perl
 # Compiler flags
 # -fno-builtin is required to avoid refs to undefined functions in the kernel.
 # Only optimize to -O1 to discourage inlining, which complicates backtraces.
-CFLAGS := $(CFLAGS) $(DEFS) $(LABDEFS) -O1 -fno-builtin -I$(TOP) -MD
+CFLAGS := $(CFLAGS) $(DEFS) $(LABDEFS) -O1 -fno-builtin -I$(TOP) -MD 
 CFLAGS += -fno-omit-frame-pointer -fno-pic -fno-inline
 CFLAGS += -std=c99 -fasm -ffreestanding -fno-strict-aliasing
-CFLAGS += -Wall -Wno-format -Wno-unused -Werror -gstabs -m32
+CFLAGS += -Wall -Wno-format -Wno-unused -Werror -gstabs -m32 
 # -fno-tree-ch prevented gcc from sometimes reordering read_ebp() before
 # mon_backtrace()'s function prologue on gcc version: (Debian 4.7.2-5) 4.7.2
 CFLAGS += -fno-tree-ch
@@ -125,10 +125,10 @@ all:
 	   $(OBJDIR)/lib/%.o $(OBJDIR)/fs/%.o $(OBJDIR)/net/%.o \
 	   $(OBJDIR)/user/%.o
 
-KERN_CFLAGS := $(CFLAGS) -DJOS_KERNEL -gstabs
+KERN_CFLAGS := $(CFLAGS) -DJOS_KERNEL -DMLFQ_SCHED -gstabs
 USER_CFLAGS := $(CFLAGS) -DJOS_USER -gstabs
 
-# Update .vars.X if variable X has changed since the last make run.
+# Update .vars.X if variable X has changed since the last make r	un.
 #
 # Rules that use variable X should depend on $(OBJDIR)/.vars.X.  If
 # the variable's value has changed, this will update the vars file and

@@ -153,10 +153,12 @@ sys_exofork(void)
 	newenv->env_status = ENV_NOT_RUNNABLE;
 	newenv->env_tf = curenv->env_tf;
 	newenv->env_tf.tf_regs.reg_eax = 0;
+#ifdef MLFQ_SCHED
 	env_change_priority(newenv,
 	                    curenv->queue_num == NQUEUES - 1
 	                            ? curenv->queue_num
 	                            : curenv->queue_num + 1);
+#endif
 	return newenv->env_id;
 	// panic("sys_exofork not implemented");
 }
@@ -444,6 +446,7 @@ sys_ipc_recv(void *dstva)
 static int
 sys_change_prio(envid_t env_id, int new_prio)
 {
+#ifdef MLFQ_SCHED
 	struct Env *env;
 	int r;
 	if ((r = envid2env(env_id, &env, true)))
@@ -458,6 +461,7 @@ sys_change_prio(envid_t env_id, int new_prio)
 		return 0;
 
 	env_change_priority(env, new_prio);
+#endif
 	return 0;
 }
 
