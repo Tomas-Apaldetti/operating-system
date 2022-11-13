@@ -6,7 +6,7 @@
 #include <kern/pmap.h>
 #include <kern/monitor.h>
 
-// #define MLFQ_SCHED
+#define MLFQ_SCHED
 
 #define NDWN_CALLS 1024
 
@@ -43,14 +43,6 @@ void sched_round_robin(struct Env *enviroments,
 void sched_MLFQ(void);
 
 void
-log_queue(queue_t *queue)
-{
-	cprintf("Puntero envs: %x\n", queue->envs);
-	cprintf("Puntero last_env: %x\n", queue->last_env);
-	cprintf("Cantidad de envs: %d\n", queue->num_envs);
-}
-
-void
 sched_round_robin(struct Env *enviroments, int32_t num_envs, struct Env *last_run_env)
 {
 	struct Env *curr_env;
@@ -85,47 +77,6 @@ sched_round_robin(struct Env *enviroments, int32_t num_envs, struct Env *last_ru
 		curr_env = curr_env->next_env;
 	}
 }
-
-void
-print_queue(queue_t *queue)
-{
-	struct Env *curr_env = queue->envs;
-	cprintf("\n|");
-
-	while (curr_env) {
-		cprintf("| %p -> %p ||", curr_env, curr_env->next_env);
-		curr_env = curr_env->next_env;
-	}
-	cprintf("\n");
-}
-
-struct Env *
-queue_remove_rec(queue_t *queue,
-                 struct Env *prev_env,
-                 struct Env *curr_env,
-                 struct Env *env_to_rmv)
-{
-	if (!curr_env) {
-		return NULL;
-	}
-
-	if (curr_env == env_to_rmv) {
-		if (queue->last_env == env_to_rmv) {
-			if (prev_env) {
-				prev_env->next_env = NULL;
-			}
-
-			queue->last_env = prev_env;
-		}
-
-		return curr_env->next_env;
-	}
-
-	curr_env->next_env =
-	        queue_remove_rec(queue, curr_env, curr_env->next_env, env_to_rmv);
-	return curr_env;
-}
-
 
 void
 queue_remove(queue_t *queue, struct Env *env)

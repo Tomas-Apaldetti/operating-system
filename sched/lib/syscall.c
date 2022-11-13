@@ -114,7 +114,7 @@ sys_ipc_recv(void *dstva)
 int
 sys_get_prio(envid_t envid)
 {
-	return syscall(SYS_sched_prio, 1, (uint32_t)envid, 0, 0, 0, 0);
+	return syscall(SYS_sched_prio, 0, (uint32_t)envid, 0, 0, 0, 0);
 }
 
 int

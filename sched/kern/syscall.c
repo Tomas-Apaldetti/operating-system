@@ -451,7 +451,7 @@ sys_change_prio(envid_t env_id, int new_prio)
 
 	bool in_range = new_prio >= 0 && new_prio < NQUEUES;
 
-	if (!in_range || new_prio > env->queue_num)
+	if (!in_range || new_prio < env->queue_num)
 		return -E_INVAL;
 
 	if (new_prio == env->queue_num)
