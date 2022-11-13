@@ -69,6 +69,7 @@ struct Env {
 	int32_t queue_num;
 	struct Env *next_env;
 	int32_t time_remaining;
+	int32_t time_in_queue;
 };
 ```
 Para el facil armado y manejo de la estructuras de las colas, cada _environment_ tiene un puntero a su proximo _environment_ dentro de la cola. 
@@ -86,6 +87,7 @@ Las variables que se utilizan para 'tunear' los tiempos de esta implementacion d
 - `NQUEUES` : Cantidad de colas dentro de MLFQ
 - `MLFQ_BOOST_AMNT` : Cantidad de veces que se debe terminar el equivalente a un _time slice_ para realizar el boost de todos los _environments_ a la cola de mayor prioridad
 - `MLFQ_BASE_TIMER` : Tiempo base de un _time slice_. El tiempo final puede ser, o no, modificado por la prioridad del _environment_ a correr.
-
-
+- `MLFQ_MIN_THRESHOLD` : Cantidad de tiempo minimo para que un _environment_ pueda correrse. Se toma para que luego del _context switch_ el proceso pueda realizar acciones. 
+- `MLFQ_MAX_TIME_IN_QUEUE` : Cantidad de tiempo hasta que un _environment_ baje de prioridad.
+- `CPU_TIME_HALT` : Tiempo para que una CPU se despierte desde `CPU_HALTED` para ver si tiene algo para correr. 
 ---
