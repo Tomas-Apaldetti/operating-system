@@ -1,23 +1,11 @@
 #include <inc/assert.h>
 #include <inc/x86.h>
 #include <inc/sched.h>
+
 #include <kern/spinlock.h>
 #include <kern/env.h>
 #include <kern/pmap.h>
 #include <kern/monitor.h>
-
-#define MLFQ_SCHED
-
-#define NDWN_CALLS 1024
-
-typedef struct sched_stats {
-	size_t sched_calls;
-	size_t boost_calls;
-	envid_t downgrade_calls[NDWN_CALLS];
-	int num_downgrade_calls;
-	envid_t env_run_calls[NDWN_CALLS];
-	int num_env_run_calls;
-} sched_stats_t;
 
 sched_stats_t stats = { .sched_calls = 0,
 	                .boost_calls = 0,
@@ -31,7 +19,6 @@ typedef struct queue {
 	int32_t num_envs;
 } queue_t;
 
-int32_t schedno = 0;
 queue_t queues[NQUEUES] = { { 0 } };
 
 void sched_halt(void);
@@ -56,6 +43,7 @@ sched_round_robin(struct Env *enviroments, int32_t num_envs, struct Env *last_ru
 		if (curr_env->env_status == ENV_RUNNABLE) {
 			curr_env->time_remaining =
 			        MLFQ_TIMER(curr_env->queue_num);
+			// ADD_ENV_RUN_CALL(curr_env)
 			env_run(curr_env);
 		}
 		curr_env = curr_env->next_env;
@@ -72,6 +60,7 @@ sched_round_robin(struct Env *enviroments, int32_t num_envs, struct Env *last_ru
 		     curr_env == last_run_env)) {
 			curr_env->time_remaining =
 			        MLFQ_TIMER(curr_env->queue_num);
+			// ADD_ENV_RUN_CALL(curr_env)
 			env_run(curr_env);
 		}
 		curr_env = curr_env->next_env;
@@ -133,9 +122,9 @@ queue_push(queue_t *queue, struct Env *env)
 void
 env_change_priority(struct Env *env, int32_t new_priority)
 {
-	if (new_priority >= NQUEUES) {
+	if (new_priority >= NQUEUES)
 		return;
-	}
+
 	queue_t *pqueue = queues + env->queue_num;
 	queue_t *nqueue = queues + new_priority;
 
@@ -158,20 +147,23 @@ downgrade_env(struct Env *env)
 {
 	env_change_priority(env, env->queue_num + 1);
 	MLFQ_TIME_RESET(env);
+	// ADD_DOWNGRADE_CALL(env)
 }
 
 bool
 should_boost()
 {
-	return (schedno >= MLFQ_BOOST);
+	return (mlfq_time_count >= MLFQ_BOOST);
 }
 
 void
 boost()
 {
-	MLFQ_BOOST_RESET;
 	struct Env *curr_env;
 	struct Env *next_env;
+
+	//
+	MLFQ_BOOST_RESET;
 
 	for (int i = 1; i < NQUEUES; i++) {
 		while (queues[i].envs) {
@@ -188,11 +180,9 @@ sched_MLFQ(void)
 		downgrade_env(curenv);
 	}
 
-
 	if (should_boost()) {
 		boost();
 	}
-
 
 	// Find next env to run in RR fashion
 	for (int32_t i = 0; i < NQUEUES; i++) {
@@ -225,6 +215,8 @@ sched_free_env(struct Env *env)
 void
 sched_yield(void)
 {
+	stats.sched_calls++;
+
 #ifdef MLFQ_SCHED
 	sched_MLFQ();
 #else

@@ -125,7 +125,7 @@ all:
 	   $(OBJDIR)/lib/%.o $(OBJDIR)/fs/%.o $(OBJDIR)/net/%.o \
 	   $(OBJDIR)/user/%.o
 
-KERN_CFLAGS := $(CFLAGS) -DJOS_KERNEL -gstabs
+KERN_CFLAGS := $(CFLAGS) -DJOS_KERNEL -gstabs -DMLFQ_SCHED
 USER_CFLAGS := $(CFLAGS) -DJOS_USER -gstabs
 
 # Update .vars.X if variable X has changed since the last make run.
@@ -149,6 +149,7 @@ CPUS ?= 1
 
 QEMUOPTS = -serial mon:stdio -gdb tcp:$(GDBSERV)
 QEMUOPTS += $(shell if $(QEMU) -nographic -help | grep -q '^-D '; then echo '-D qemu.log'; fi)
+QEMUOPTS += -no-reboot -no-shutdown -d cpu_reset
 KERNEL_IMAGE = $(OBJDIR)/kern/kernel
 QEMUOPTS += -smp $(CPUS)
 QEMUOPTS += $(QEMUEXTRA) -d guest_errors
