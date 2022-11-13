@@ -59,4 +59,33 @@ A continuacion mostramos el procedimiento de cambio de contexto por medio de GDB
 
 ## Scheduler
 
+### MLFQ
+
+Para el scheduler con prioridades se decidio implementar MLFQ. Para esto se realizaron ciertos cambios en la estructuras del _environment_ y el comportamiento del `lAPIC`.
+
+```c
+struct Env {
+	(...)
+	int32_t queue_num;
+	struct Env *next_env;
+	int32_t time_remaining;
+};
+```
+Para el facil armado y manejo de la estructuras de las colas, cada _environment_ tiene un puntero a su proximo _environment_ dentro de la cola. 
+
+`queue_num` refiere a la cola en la que se encuentra actualmente el _environment_. A menor numero de cola, mayor prioridad. (En otras palabras, la cola 0 es la que tiene mas prioridad)
+
+`time_remaining` es el tiempo que le queda al environment para correr.
+
+__local APIC timer__
+
+Se modifico el comportamiento, pasandolo de _periodic mode_, a _one-shot mode_, permitiendo un control del tiempo mas granular para cada _environment_ que se vaya a correr.
+
+Las variables que se utilizan para 'tunear' los tiempos de esta implementacion de MLFQ se encuentran en `inc/sched.h`.
+
+- `NQUEUES` : Cantidad de colas dentro de MLFQ
+- `MLFQ_BOOST_AMNT` : Cantidad de veces que se debe terminar el equivalente a un _time slice_ para realizar el boost de todos los _environments_ a la cola de mayor prioridad
+- `MLFQ_BASE_TIMER` : Tiempo base de un _time slice_. El tiempo final puede ser, o no, modificado por la prioridad del _environment_ a correr.
+
+
 ---
