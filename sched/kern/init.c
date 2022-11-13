@@ -69,8 +69,12 @@ i386_init(void)
 
 #ifdef MLFQ_SCHED
 	// Touch all you want.
+	ENV_CREATE(user_hello, ENV_TYPE_USER);
 	ENV_CREATE(user_priority, ENV_TYPE_USER);
+	ENV_CREATE(user_dumbfork, ENV_TYPE_USER);
+	ENV_CREATE(user_stresssched, ENV_TYPE_USER);
 #else
+	ENV_CREATE(user_hello, ENV_TYPE_USER);
 	ENV_CREATE(user_dumbfork, ENV_TYPE_USER);
 #endif
 

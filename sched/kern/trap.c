@@ -29,7 +29,6 @@ static struct Trapframe *last_tf;
 struct Gatedesc idt[256] = { { 0 } };
 struct Pseudodesc idt_pd = { sizeof(idt) - 1, (uint32_t) idt };
 
-
 static const char *
 trapname(int trapno)
 {
@@ -297,9 +296,10 @@ trap(struct Trapframe *tf)
 	// scheduled, so we should return to the current environment
 	// if doing so makes sense.
 	if (curenv && curenv->env_status == ENV_RUNNING &&
-	    curenv->time_remaining > MLFQ_MIN_THRESHOLD)
+	    curenv->time_remaining > MLFQ_MIN_THRESHOLD) {
+		ADD_ENV_RUN_CALL_STATS(curenv);
 		env_run(curenv);
-	else
+	} else
 		sched_yield();
 }
 
@@ -377,6 +377,7 @@ page_fault_handler(struct Trapframe *tf)
 
 		tf->tf_esp = tmp;
 		tf->tf_eip = (uint32_t) curenv->env_pgfault_upcall;
+		ADD_ENV_RUN_CALL_STATS(curenv);
 		env_run(curenv);
 	}
 

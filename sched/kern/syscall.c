@@ -457,9 +457,12 @@ sys_change_prio(envid_t env_id, int new_prio)
 	if (new_prio == env->queue_num)
 		return 0;
 
+	ADD_DOWNGRADE_CALL_STATS(env, env->queue_num, new_prio);
 	env_change_priority(env, new_prio);
-#endif
+	return 0;
+#else
 	return -E_INVAL;
+#endif
 }
 
 /// @brief See the priority of an existing environment

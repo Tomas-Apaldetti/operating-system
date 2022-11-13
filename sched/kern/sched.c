@@ -7,11 +7,21 @@
 #include <kern/pmap.h>
 #include <kern/monitor.h>
 
-sched_stats_t stats = { 
-	.sched_calls = 0,
-	.boost_calls = 0,
-	.num_downgrade_calls = 0,
-	.num_env_run_calls = 0 };
+#define T_RED "\x1b[31m"
+#define T_GREEN "\x1b[32m"
+#define T_YELLOW "\x1b[33m"
+#define RESET "\x1b[0m"
+
+#define GREEN(string) cprintf(T_GREEN "%s" RESET "\n", string);
+#define RED(string) cprintf(T_RED "%s" RESET "\n", string);
+#define YELLOW(string) cprintf(T_YELLOW "%s" RESET "\n", string);
+
+sched_stats_t stats = { .sched_calls = 0,
+	                .boost_calls = 0,
+	                .num_downgrade_calls = 0,
+	                .laps_num_downgrade_calls = 0,
+	                .num_env_run_calls = 0,
+	                .laps_env_run_calls = 0 };
 
 uint32_t mlfq_time_count = 0;
 typedef struct queue {
@@ -44,7 +54,7 @@ sched_round_robin(struct Env *enviroments, int32_t num_envs, struct Env *last_ru
 		if (curr_env->env_status == ENV_RUNNABLE) {
 			curr_env->time_remaining =
 			        MLFQ_TIMER(curr_env->queue_num);
-			// ADD_ENV_RUN_CALL(curr_env)
+			ADD_ENV_RUN_CALL_STATS(curr_env);
 			env_run(curr_env);
 		}
 		curr_env = curr_env->next_env;
@@ -61,7 +71,7 @@ sched_round_robin(struct Env *enviroments, int32_t num_envs, struct Env *last_ru
 		     curr_env == last_run_env)) {
 			curr_env->time_remaining =
 			        MLFQ_TIMER(curr_env->queue_num);
-			// ADD_ENV_RUN_CALL(curr_env)
+			ADD_ENV_RUN_CALL_STATS(curr_env);
 			env_run(curr_env);
 		}
 		curr_env = curr_env->next_env;
@@ -146,9 +156,8 @@ should_env_downgrade(struct Env *env)
 void
 downgrade_env(struct Env *env)
 {
+	ADD_DOWNGRADE_CALL_STATS(env, env->queue_num, env->queue_num + 1);
 	env_change_priority(env, env->queue_num + 1);
-	MLFQ_TIME_RESET(env);
-	// ADD_DOWNGRADE_CALL(env)
 }
 
 bool
@@ -163,7 +172,7 @@ boost()
 	struct Env *curr_env;
 	struct Env *next_env;
 
-	//
+	ADD_BOOST_CALL_STATS;
 	MLFQ_BOOST_RESET;
 
 	for (int i = 1; i < NQUEUES; i++) {
@@ -216,6 +225,7 @@ sched_free_env(struct Env *env)
 void
 sched_yield(void)
 {
+	ADD_SCHED_CALL_STATS;
 #ifdef MLFQ_SCHED
 	sched_MLFQ();
 #else
@@ -240,6 +250,64 @@ sched_yield(void)
 	sched_halt();
 }
 
+void
+print_stats()
+{
+	int curr_env_idx;
+	int last_env_idx;
+	YELLOW("\n===============================\n"
+	       "=============STATS=============\n"
+	       "===============================\n");
+
+	GREEN("GENERAL INFORMATION:")
+
+	cprintf("Scheduler calls: %d\n", stats.sched_calls);
+	cprintf("Enviroment to run calls: %d\n",
+	        stats.num_env_run_calls + stats.laps_env_run_calls * NRUN_CALLS);
+	cprintf("\n");
+
+
+	GREEN("MLFQ INFORMATION:")
+	cprintf("Downgrade an enviroment calls: %d\n",
+	        stats.num_downgrade_calls +
+	                stats.laps_num_downgrade_calls * NDWN_CALLS);
+	cprintf("Boost all enviroments calls: %d\n", stats.boost_calls);
+	cprintf("\n");
+
+	GREEN("LAST TWENTY ENVIROMENTS THAT RAN:")
+	curr_env_idx = stats.num_env_run_calls - 1;
+	if (curr_env_idx < 20)
+		last_env_idx = 0;
+	else
+		last_env_idx = curr_env_idx - 19;
+
+	while (curr_env_idx >= last_env_idx) {
+		cprintf("%d) [%08x] Priority: (%d)\n",
+		        curr_env_idx + 1,
+		        stats.env_run_calls[curr_env_idx].env_id,
+		        stats.env_run_calls[curr_env_idx].curr_prio);
+		curr_env_idx--;
+	}
+	cprintf("\n");
+
+	GREEN("LAST TWENTY DOWNGRADED ENVIROMENTS:")
+	curr_env_idx = stats.num_downgrade_calls - 1;
+	if (curr_env_idx < 20)
+		last_env_idx = 0;
+	else
+		last_env_idx = curr_env_idx - 19;
+
+	while (curr_env_idx >= last_env_idx) {
+		cprintf("%d) Env: [%08x] Priority: (%d) -> (%d)\n",
+		        curr_env_idx + 1,
+		        stats.downgrade_calls[curr_env_idx].env_id,
+		        stats.downgrade_calls[curr_env_idx].last_prio,
+		        stats.downgrade_calls[curr_env_idx].curr_prio);
+		curr_env_idx--;
+	}
+	cprintf("\n");
+}
+
 // Halt this CPU when there is nothing to do. Wait until the
 // timer interrupt wakes it up. This function never returns.
 //
@@ -259,6 +327,9 @@ sched_halt(void)
 	}
 	if (i == NENV) {
 		cprintf("No runnable environments in the system!\n");
+		// Once the scheduler has finishied it's work, print statistics
+		// on performance. Your code here
+		print_stats();
 		while (1)
 			monitor(NULL);
 	}
@@ -275,9 +346,6 @@ sched_halt(void)
 
 	// Release the big kernel lock as if we were "leaving" the kernel
 	unlock_kernel();
-
-	// Once the scheduler has finishied it's work, print statistics on
-	// performance. Your code here
 
 	// Reset stack pointer, enable interrupts and then halt.
 	asm volatile("movl $0, %%ebp\n"

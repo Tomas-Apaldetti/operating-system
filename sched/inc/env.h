@@ -64,6 +64,7 @@ struct Env {
 	int32_t queue_num;
 	struct Env *next_env;
 	int32_t time_remaining;
+	int32_t time_in_queue;
 };
 
 #endif  // !JOS_INC_ENV_H
