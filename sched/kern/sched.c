@@ -266,7 +266,7 @@ print_stats()
 	        stats.num_env_run_calls + stats.laps_env_run_calls * NRUN_CALLS);
 	cprintf("\n");
 
-
+#ifdef MLFQ_SCHED
 	GREEN("MLFQ INFORMATION:")
 	cprintf("Downgrade an enviroment calls: %d\n",
 	        stats.num_downgrade_calls +
@@ -306,6 +306,23 @@ print_stats()
 		curr_env_idx--;
 	}
 	cprintf("\n");
+#endif
+#ifndef MLFQ_SCHED
+	GREEN("LAST TWENTY ENVIROMENTS THAT RAN:")
+	curr_env_idx = stats.num_env_run_calls - 1;
+	if (curr_env_idx < 20)
+		last_env_idx = 0;
+	else
+		last_env_idx = curr_env_idx - 19;
+
+	while (curr_env_idx >= last_env_idx) {
+		cprintf("%d) [%08x]\n",
+		        curr_env_idx + 1,
+		        stats.env_run_calls[curr_env_idx].env_id);
+		curr_env_idx--;
+	}
+	cprintf("\n");
+#endif
 }
 
 // Halt this CPU when there is nothing to do. Wait until the
