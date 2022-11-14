@@ -34,14 +34,133 @@ queue_t queues[NQUEUES] = { { 0 } };
 
 void sched_halt(void);
 
-void sched_round_robin(struct Env *enviroments,
-                       int32_t num_envs,
-                       struct Env *last_run_env);
+//========== SCHEDULERS ==========//
+
+void sched_round_robin(struct Env *enviroments, struct Env *last_run_env);
 
 void sched_MLFQ(void);
 
+//========== ALLOC & FREE ==========//
+
+void sched_alloc_env(struct Env *env);
+
+void sched_free_env(struct Env *env);
+
+//========== QUEUE ==========//
+
+void queue_remove(queue_t *queue, struct Env *env);
+
+void queue_push(queue_t *queue, struct Env *env);
+
+//========== MLFQ PRIORITIES ==========//
+
+void env_change_priority(struct Env *env, int32_t new_priority);
+
+bool should_env_downgrade(struct Env *env);
+
+void downgrade_env(struct Env *env);
+
+bool should_boost();
+
+void boost();
+
+//========== PRINTS ==========//
+
+void print_stats(void);
+
+//====================================//
+//========== IMPLEMENTATION ==========//
+//====================================//
+
+// Choose a user environment to run and run it.
 void
-sched_round_robin(struct Env *enviroments, int32_t num_envs, struct Env *last_run_env)
+sched_yield(void)
+{
+	ADD_SCHED_CALL_STATS;
+#ifdef MLFQ_SCHED
+	sched_MLFQ();
+#else
+	// Implement simple round-robin scheduling.
+	//
+	// Search through 'envs' for an ENV_RUNNABLE environment in
+	// circular fashion starting just after the env this CPU was
+	// last running.  Switch to the first such environment found.
+	//
+	// If no envs are runnable, but the environment previously
+	// running on this CPU is still ENV_RUNNING, it's okay to
+	// choose that environment.
+	//
+	// Never choose an environment that's currently running on
+	// another CPU (env_status == ENV_RUNNING). If there are
+	// no runnable environments, simply drop through to the code
+	// below to halt the cpu.
+
+	// Your code here
+	sched_round_robin(queues[0].envs, curenv);
+#endif
+	sched_halt();
+}
+
+// Halt this CPU when there is nothing to do. Wait until the
+// timer interrupt wakes it up. This function never returns.
+//
+void
+sched_halt(void)
+{
+	int i;
+
+	// For debugging and testing purposes, if there are no runnable
+	// environments in the system, then drop into the kernel monitor.
+	for (i = 0; i < NENV; i++) {
+		if ((envs[i].env_status == ENV_RUNNABLE ||
+		     envs[i].env_status == ENV_RUNNING ||
+		     envs[i].env_status == ENV_DYING)) {
+			break;
+		}
+	}
+	if (i == NENV) {
+		cprintf("No runnable environments in the system!\n");
+		// Once the scheduler has finishied it's work, print
+		// statistics on performance. Your code here
+		print_stats();
+		while (1)
+			monitor(NULL);
+	}
+
+	// Mark that no environment is running on this CPU
+	curenv = NULL;
+	lcr3(PADDR(kern_pgdir));
+	TIMER_SET(CPU_TIME_HALT);
+
+	// Mark that this CPU is in the HALT state, so that when
+	// timer interupts come in, we know we should re-acquire the
+	// big kernel lock
+	xchg(&thiscpu->cpu_status, CPU_HALTED);
+
+	// Release the big kernel lock as if we were "leaving" the kernel
+	unlock_kernel();
+
+	// Reset stack pointer, enable interrupts and then halt.
+	asm volatile("movl $0, %%ebp\n"
+	             "movl %0, %%esp\n"
+	             "pushl $0\n"
+	             "pushl $0\n"
+	             "sti\n"
+	             "1:\n"
+	             "hlt\n"
+	             "jmp 1b\n"
+	             :
+	             : "a"(thiscpu->cpu_ts.ts_esp0));
+}
+
+
+//========== SCHEDULERS ==========//
+
+/// @brief Execute the scheduler MLFQ
+/// @param enviroments List of enviroments to run in RR
+/// @param last_run_env The last enviroment that the CPU has run
+void
+sched_round_robin(struct Env *enviroments, struct Env *last_run_env)
 {
 	struct Env *curr_env;
 
@@ -78,6 +197,76 @@ sched_round_robin(struct Env *enviroments, int32_t num_envs, struct Env *last_ru
 	}
 }
 
+/// @brief Execute the scheduler MLFQ
+/// @param
+void
+sched_MLFQ(void)
+{
+	// Check if curenv has to be downgraded
+	if (should_env_downgrade(curenv)) {
+		downgrade_env(curenv);
+	}
+
+	if (should_boost()) {
+		boost();
+	}
+
+	// Find next env to run in RR fashion
+	for (int32_t i = 0; i < NQUEUES; i++) {
+		// if curenv is on the current queue, the round robin must start at curenv
+		if (curenv && curenv->queue_num == i)
+			sched_round_robin(queues[i].envs, curenv);
+		else
+			sched_round_robin(queues[i].envs, NULL);
+	}
+}
+
+//========== ALLOC & FREE ==========//
+
+/// @brief Alloc the enviroment into the first queue
+/// @param env
+void
+sched_alloc_env(struct Env *env)
+{
+	env->next_env = NULL;
+	env->queue_num = 0;
+	MLFQ_TIME_RESET(env);
+	queue_push(queues, env);
+}
+
+/// @brief Free the enviroment from its queue
+/// @param env
+void
+sched_free_env(struct Env *env)
+{
+	queue_remove(queues + env->queue_num, env);
+}
+
+//========== QUEUE ==========//
+
+/// @brief Add an enviroment into a queue
+/// @param queue
+/// @param env
+void
+queue_push(queue_t *queue, struct Env *env)
+{
+	if (!env || !queue)
+		return;
+
+	if (!queue->envs) {
+		queue->envs = env;
+	} else {
+		queue->last_env->next_env = env;
+	}
+
+	queue->last_env = env;
+	env->next_env = NULL;
+	queue->num_envs++;
+}
+
+/// @brief Remove an enviroment from the queue
+/// @param queue
+/// @param env
 void
 queue_remove(queue_t *queue, struct Env *env)
 {
@@ -113,23 +302,11 @@ queue_remove(queue_t *queue, struct Env *env)
 	}
 }
 
-void
-queue_push(queue_t *queue, struct Env *env)
-{
-	if (!env || !queue)
-		return;
+//========== MLFQ PRIORITIES ==========//
 
-	if (!queue->envs) {
-		queue->envs = env;
-	} else {
-		queue->last_env->next_env = env;
-	}
-
-	queue->last_env = env;
-	env->next_env = NULL;
-	queue->num_envs++;
-}
-
+/// @brief Change the priority of an enviroment
+/// @param env
+/// @param new_priority
 void
 env_change_priority(struct Env *env, int32_t new_priority)
 {
@@ -182,76 +359,10 @@ boost()
 	}
 }
 
-void
-sched_MLFQ(void)
-{
-	// Check if curenv has to be downgraded
-	if (should_env_downgrade(curenv)) {
-		downgrade_env(curenv);
-	}
-
-	if (should_boost()) {
-		boost();
-	}
-
-	// Find next env to run in RR fashion
-	for (int32_t i = 0; i < NQUEUES; i++) {
-		// if curenv is on the current queue, the round robin must start at curenv
-		if (curenv && curenv->queue_num == i)
-			sched_round_robin(queues[i].envs,
-			                  queues[i].num_envs,
-			                  curenv);
-		else
-			sched_round_robin(queues[i].envs, queues[i].num_envs, NULL);
-	}
-}
+//========== PRINTS ==========//
 
 void
-sched_alloc_env(struct Env *env)
-{
-	env->next_env = NULL;
-	env->queue_num = 0;
-	MLFQ_TIME_RESET(env);
-	queue_push(queues, env);
-}
-
-void
-sched_free_env(struct Env *env)
-{
-	queue_remove(queues + env->queue_num, env);
-}
-
-// Choose a user environment to run and run it.
-void
-sched_yield(void)
-{
-	ADD_SCHED_CALL_STATS;
-#ifdef MLFQ_SCHED
-	sched_MLFQ();
-#else
-	// Implement simple round-robin scheduling.
-	//
-	// Search through 'envs' for an ENV_RUNNABLE environment in
-	// circular fashion starting just after the env this CPU was
-	// last running.  Switch to the first such environment found.
-	//
-	// If no envs are runnable, but the environment previously
-	// running on this CPU is still ENV_RUNNING, it's okay to
-	// choose that environment.
-	//
-	// Never choose an environment that's currently running on
-	// another CPU (env_status == ENV_RUNNING). If there are
-	// no runnable environments, simply drop through to the code
-	// below to halt the cpu.
-
-	// Your code here
-	sched_round_robin(queues[0].envs, NENV, curenv);
-#endif
-	sched_halt();
-}
-
-void
-print_stats()
+print_stats(void)
 {
 	int curr_env_idx;
 	int last_env_idx;
@@ -323,56 +434,4 @@ print_stats()
 	}
 	cprintf("\n");
 #endif
-}
-
-// Halt this CPU when there is nothing to do. Wait until the
-// timer interrupt wakes it up. This function never returns.
-//
-void
-sched_halt(void)
-{
-	int i;
-
-	// For debugging and testing purposes, if there are no runnable
-	// environments in the system, then drop into the kernel monitor.
-	for (i = 0; i < NENV; i++) {
-		if ((envs[i].env_status == ENV_RUNNABLE ||
-		     envs[i].env_status == ENV_RUNNING ||
-		     envs[i].env_status == ENV_DYING)) {
-			break;
-		}
-	}
-	if (i == NENV) {
-		cprintf("No runnable environments in the system!\n");
-		// Once the scheduler has finishied it's work, print statistics
-		// on performance. Your code here
-		print_stats();
-		while (1)
-			monitor(NULL);
-	}
-
-	// Mark that no environment is running on this CPU
-	curenv = NULL;
-	lcr3(PADDR(kern_pgdir));
-	TIMER_SET(CPU_TIME_HALT);
-
-	// Mark that this CPU is in the HALT state, so that when
-	// timer interupts come in, we know we should re-acquire the
-	// big kernel lock
-	xchg(&thiscpu->cpu_status, CPU_HALTED);
-
-	// Release the big kernel lock as if we were "leaving" the kernel
-	unlock_kernel();
-
-	// Reset stack pointer, enable interrupts and then halt.
-	asm volatile("movl $0, %%ebp\n"
-	             "movl %0, %%esp\n"
-	             "pushl $0\n"
-	             "pushl $0\n"
-	             "sti\n"
-	             "1:\n"
-	             "hlt\n"
-	             "jmp 1b\n"
-	             :
-	             : "a"(thiscpu->cpu_ts.ts_esp0));
 }

@@ -91,23 +91,71 @@ struct Env {
 };
 ```
 
-Para el facil armado y manejo de la estructuras de las colas, cada _environment_ tiene un puntero a su proximo _environment_ dentro de la cola.
+`queue_num`: para el facil armado y manejo de la estructuras de las colas, cada _environment_ tiene un puntero a su proximo _environment_ dentro de la cola.
 
-`queue_num` refiere a la cola en la que se encuentra actualmente el _environment_. A menor numero de cola, mayor prioridad. (En otras palabras, la cola 0 es la que tiene mas prioridad)
+`queue_num`: refiere a la cola en la que se encuentra actualmente el _environment_. A menor numero de cola, mayor prioridad. (En otras palabras, la cola 0 es la que tiene mas prioridad)
 
-`time_remaining` es el tiempo que le queda al environment para correr.
+`time_remaining`: es el tiempo que le queda al _environment_ para correr.
+
+`time_in_queue`: es el tiempo que un determinado _enviroment_ utilizó para correr dentro de una cola.
 
 __local APIC timer__
 
-Se modifico el comportamiento, pasandolo de _periodic mode_, a _one-shot mode_, permitiendo un control del tiempo mas granular para cada _environment_ que se vaya a correr.
+Se modificó el comportamiento, pasandolo de _periodic mode_, a _one-shot mode_, permitiendo así un control del tiempo más granular para cada _environment_ que se vaya a correr.
 
-Las variables que se utilizan para 'tunear' los tiempos de esta implementacion de MLFQ se encuentran en `inc/sched.h`.
+Las variables que se utilizan para 'modificar' los tiempos de esta implementación de MLFQ se encuentran en `inc/sched.h`.
 
 - `NQUEUES` : Cantidad de colas dentro de MLFQ
 - `MLFQ_BOOST_AMNT` : Cantidad de veces que se debe terminar el equivalente a un _time slice_ para realizar el boost de todos los _environments_ a la cola de mayor prioridad
 - `MLFQ_BASE_TIMER` : Tiempo base de un _time slice_. El tiempo final puede ser, o no, modificado por la prioridad del _environment_ a correr.
-- `MLFQ_MIN_THRESHOLD` : Cantidad de tiempo minimo para que un _environment_ pueda correrse. Se toma para que luego del _context switch_ el proceso pueda realizar acciones.
-- `MLFQ_MAX_TIME_IN_QUEUE` : Cantidad de tiempo hasta que un _environment_ baje de prioridad. Por decisión de diseño se define de tal forma que, a menor prioridad, se le otorga un time slice menor a los procesos.
-- `CPU_TIME_HALT` : Tiempo para que una CPU se despierte desde `CPU_HALTED` para ver si tiene algo para correr.
+- `MLFQ_MIN_THRESHOLD` : Cantidad de tiempo mínimo para que un _environment_ pueda correrse. Se toma para que luego del _context switch_ el proceso pueda realizar acciones.
+- `MLFQ_MAX_TIME_IN_QUEUE` : Cantidad de tiempo hasta que un _environment_ baje de prioridad. Por decisión de diseño se definió que a mayor prioridad, se le otorga un menor time slice a los procesos. Esto decisión genera que los procesos que requieran más computo degraden su priodad rapidamente y por lo tanto mejore el tiempo de respuesta al usuario. 
+- `MLFQ_BOOST` : Tiempo que determina cuándo se debe realizar un boost de todos los procesos hacia la cola con mayor prioridad.
+- `CPU_TIME_HALT` : Tiempo para que una CPU se despierte luego de un `CPU_HALTED`.
+
+### Estadísticas
+
+Para las estadísticas se optó por realizar la siguiente estructura, la cual será impresa al final de cada ejecución del sistema operativo:
+
+```c
+typedef struct env_info {
+	envid_t env_id;
+	int32_t last_prio;
+	int32_t curr_prio;
+} env_info_t;
+
+typedef struct sched_stats {
+	size_t sched_calls;
+	size_t boost_calls;
+
+	env_info_t downgrade_calls[NDWN_CALLS];
+	size_t num_downgrade_calls;
+	size_t laps_num_downgrade_calls;
+
+	env_info_t env_run_calls[NRUN_CALLS];
+	size_t num_env_run_calls;
+	size_t laps_env_run_calls;
+
+} sched_stats_t;
+```
+`sched_calls`: representa las llamadas al scheduler.
+
+`boost_calls`: representa la cantidad de veces que se realizó un boost de los _envirments_.
+
+`downgrade_calls`: almacena la información de todos los _enviroments_ a los cuales se le realizó un _downgrade_.
+
+`num_downgrade_calls`: almacena el index del último elemento del array _downgrade_calls_.
+
+`laps_num_downgrade_calls`: cantidad de veces que se completó el array _downgrade_calls_.
+
+`env_run_calls`: almacena la información de todos los _enviroments_ a los cuales se los mandó a correr.
+
+`num_env_run_calls`: almacena el index del último elemento del array _env_run_calls_.
+
+`laps_env_run_calls`: cantidad de veces que se completó el array _env_run_calls_.
+
+### Diseño de implementación ROUND ROBIN
+
+El Round Robin fue implementado de la misma manera que MLFQ, a diferencia que únicamente los procesos no eran degradados en cuanto cumplían una cierta cantidad de _time slide_.
 
 ---
