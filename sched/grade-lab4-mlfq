@@ -261,6 +261,19 @@ def test_faultevilhandler():
     r.match(E(".$E1. user_mem_check assertion failure for va (f0100|eebfe)..."),
             E(".$E1. free env $E1"))
 
+@test(1)
+def test_priority():
+    r.user_test("priority")
+    r.match(E("I am the environment \[$E1\]"),
+            E("My priority at the start is 0"),
+            E("Then I changed my priority to something with lower priority 1"),
+            E("But I couldn't change it back to my initial priority"),
+            E("I am the child \[$E2\] starting with same priority 1"),
+            E("Then I changed my priority to the worst priority 7"),
+            E("I try to change my priority to something with lower "
+            "priority, but I couldn't change it"),
+            no=["Shutting down"])
+
 
 end_part("5")
 

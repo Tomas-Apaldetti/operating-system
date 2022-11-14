@@ -1,6 +1,20 @@
 # sched.md
 
 ---
+## Compilacion
+
+Para correr con scheduler __Round Robin__
+```bash
+make SCHED=rr <comando>
+```
+Para correr con scheduler __MLFQ__
+```bash
+make SCHED=mlfq <comando>
+```
+
+En caso de faltar la flag, compilara por defecto con __MLFQ__. En caso de que la flag sea cualquier otra cosa, sera __Round Robin__.
+
+---
 
 ## Context Switch
 
@@ -89,5 +103,5 @@ Las variables que se utilizan para 'tunear' los tiempos de esta implementacion d
 - `MLFQ_BASE_TIMER` : Tiempo base de un _time slice_. El tiempo final puede ser, o no, modificado por la prioridad del _environment_ a correr.
 - `MLFQ_MIN_THRESHOLD` : Cantidad de tiempo minimo para que un _environment_ pueda correrse. Se toma para que luego del _context switch_ el proceso pueda realizar acciones. 
 - `MLFQ_MAX_TIME_IN_QUEUE` : Cantidad de tiempo hasta que un _environment_ baje de prioridad.
-- `CPU_TIME_HALT` : Tiempo para que una CPU se despierte desde `CPU_HALTED` para ver si tiene algo para correr. 
+- `CPU_TIME_HALT` : Tiempo para que una CPU se despierte desde `CPU_HALTED` para ver si tiene algo para correr.
 ---

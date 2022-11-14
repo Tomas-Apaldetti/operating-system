@@ -6,7 +6,7 @@
 #	http://aegis.sourceforge.net/auug97.pdf
 #
 OBJDIR := obj
-
+SCHED := mlfq
 # Run 'make V=1' to turn on verbose commands, or 'make V=0' to turn them off.
 ifeq ($(V),1)
 override V =
@@ -125,7 +125,11 @@ all:
 	   $(OBJDIR)/lib/%.o $(OBJDIR)/fs/%.o $(OBJDIR)/net/%.o \
 	   $(OBJDIR)/user/%.o
 
+ifeq ($(SCHED), mlfq)
 KERN_CFLAGS := $(CFLAGS) -DJOS_KERNEL -DMLFQ_SCHED -gstabs
+else
+KERN_CFLAGS := $(CFLAGS) -DJOS_KERNEL -gstabs
+endif
 USER_CFLAGS := $(CFLAGS) -DJOS_USER -gstabs
 
 # Update .vars.X if variable X has changed since the last make r	un.
@@ -202,11 +206,17 @@ ifneq ($(V),@)
 GRADEFLAGS += -v
 endif
 
+ifeq ($(SCHED), mlfq)
+GRADE_FILE := grade-lab$(LAB)-mlfq
+else
+GRADE_FILE := grade-lab$(LAB)
+endif
+
 grade:
 	@echo $(MAKE) clean
 	@$(MAKE) clean || \
 	  (echo "'make clean' failed.  HINT: Do you have another running instance of JOS?" && exit 1)
-	./grade-lab$(LAB) $(GRADEFLAGS)
+	./$(GRADE_FILE) $(GRADEFLAGS)
 
 format: .clang-files .clang-format
 	xargs -r clang-format -i <$<
