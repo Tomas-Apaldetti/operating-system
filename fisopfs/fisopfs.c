@@ -10,10 +10,138 @@
 #include <stdlib.h>
 #include <errno.h>
 
+// typedef u16 short;
+// typedef fspoint int;
+// typedef int inode;
+typedef char byte;
+
+#define KiB 1024
+#define MiB 1024 * KiB
+
+#define BLOCK_SIZE 32 * KiB
+
+#define MAX_FILE_NAME 1 * KiB
+#define MAX_INODE_BLOCK_PTR 13
+
+byte blocks[200 * MiB] = { 0 };
+
+#define SUPERBLOCK (superblock_t *) blocks
+#define BLOCK(n)                                                               \
+	{                                                                      \
+		(void *) ((byte *) blocks + BLOCK_SIZE * n)                    \
+	}
+
+// Estructura
+// Primer Bloque: Superbloque - Bitmap
+// A partir del segundo bloque: Inodos
+
+// En total hay 6400 bloques de 32 KiB cada uno, lo cual llega a un total de 200
+// MiB. Si cada bloque tuviera un inodo asociado, seria un total de 6400 inodos
+// maximo Si cada inodo aproximadamente ocupa 64 bytes, por bloque podrian haber
+// 512 inodos, lo cual implica que los inodos ocuparan 13 bloques.
+// Esto generaria un total de 6386 bloques para datos
+
+// La conclusion de arriba puede que esté mal porque pesa mas cada inodo ahora.
+// Tambien habria que ver los tipos de datos que puse que los saque de
+// struct_stat.h asi directamente le podemos pasar la info de los inodos sin hacer calculos extras en el medio
+
+enum file_type_t {
+	FS_DIRECTORY,
+	FS_FILE,
+	FS_LINK,
+};
+
+typedef struct superblock {
+	// Struct amount
+	int inode_amount;
+	int data_blocks_amount;
+	int block_size;
+
+	// Block idx
+	int inode_start;
+	int data_start;
+
+	// Inode idx
+	int root_inode;
+} superblock_t;
+
+typedef struct inode {
+	// Permissions and Ownership
+	__mode_t type_mode;  // can this file be read/written/executed?
+	__uid_t user_id;
+	__gid_t group_id;
+
+	// Time info
+	__time_t last_access;  // faltan los segundos y minutos
+	__time_t last_modification;
+	__time_t created_date;
+	__time_t deleted;
+
+	// Inode data
+	__off_t size;
+	__nlink_t link_count;
+	int block_count;
+	int related_block[MAX_INODE_BLOCK_PTR];  // 12 directos, 1 indirecto
+
+	// Optimization
+	int next_free;
+} inode_t;
+
+typedef struct dentry {
+	int inode_number;
+	enum file_type_t file_type;  // file/directory/link
+	char file_name[MAX_FILE_NAME];
+} dentry_t;
+
+//===========================NEW===========================//
+// No se exactamente donde tiene que ir pero este es su funcionamiento
+void
+init_superblock()
+{
+	superblock_t *superblock = SUPERBLOCK;
+
+	superblock->inode_amount = 6400;
+	superblock->data_blocks_amount = 6386;
+	superblock->block_size = 32 * KiB;
+
+	superblock->inode_start = 1;
+	superblock->data_start = 14;
+
+	superblock->root_inode = 0;
+}
+
+inode_t *
+get_inode(int inode_nmb)
+{
+	superblock_t *superblock = SUPERBLOCK;
+	inode_t *inode = BLOCK(superblock->inode_start);
+	return inode + inode_nmb;
+}
+
+void
+init_root_inode()
+{
+	superblock_t *superblock = SUPERBLOCK;
+	inode_t *root_inode = get_inode(superblock->root_inode);
+
+	// root_inode->type_mode = 0;
+	// root_inode->user_id = 0;
+	// root_inode->group_id = 0;
+}
+
+void
+file_system_init()
+{
+	init_superblock();
+	init_root_inode();
+}
+//=========================================================//
+
 static int
 fisopfs_getattr(const char *path, struct stat *st)
 {
 	printf("[debug] fisopfs_getattr(%s)\n", path);
+
 
 	if (strcmp(path, "/") == 0) {
 		st->st_uid = 1717;
@@ -296,6 +424,8 @@ static int
 fisopfs_fgetattr(const char *path, struct stat *stbuf, struct fuse_file_info *fi)
 {
 	printf("[debug] fisopfs_fgetattr \n");
+
+
 	return -ENOENT;
 }
 
@@ -450,11 +580,15 @@ static struct fuse_operations operations = {
 	.fallocate = fisopfs_fallocate,
 };
 
+
 int
 main(int argc, char *argv[])
 {
 	for (int i = 0; i < argc; i++) {
 		printf("%s\n", argv[i]);
 	}
+
+	file_system_init();
+
 	return fuse_main(argc, argv, &operations, NULL);
 }
