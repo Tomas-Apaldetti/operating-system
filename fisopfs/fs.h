@@ -13,7 +13,9 @@
 #define MAX_FILE_NAME 256
 
 #define MAX_INODE_BLOCK_PTR 13
-#define INODE_ONE_LI_INDEX 13 - 1
+#define MAX_DIRECT_BLOCK_COUNT 12
+#define INODE_ONE_LI_COUNT 13
+#define INODE_ONE_LI_INDEX MAX_DIRECT_BLOCK_COUNT 
 
 #define DENTRY_EMPTY 0
 
@@ -34,9 +36,6 @@
 #define FS_LINK 0x4 << 9
 
 typedef char byte;
-// 0000000       000 000 000
-// file type    |Permisos
-
 typedef struct superblock {
 	// Struct amount
 	int inode_amount;
@@ -78,13 +77,13 @@ typedef struct dentry {
 
 void init_fs(void);
 
-inode_t *get_inode(int);
+inode_t *get_inode(ino_t);
 
-// int search_inode(const char *path, inode_t *out);
+int search_inode(const char *path, inode_t **out);
 
-// int write(inode_t *inode, const char *buf, size_t size, off_t offset);
+long fiuba_write(inode_t *inode, const char *buf, size_t size, off_t offset);
 
-// int read(inode_t *inode, char *buffer, size_t size, off_t offset);
+long fiuba_read(const inode_t *inode, char *buffer, size_t size, off_t offset);
 
 // void set_type(inode_t *inode, mode_t type);
 

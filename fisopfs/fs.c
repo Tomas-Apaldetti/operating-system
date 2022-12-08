@@ -1,8 +1,10 @@
 #include "fs.h"
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <errno.h>
+#include <string.h>
 #include <unistd.h>
-
+#include <stdbool.h>
 // Estructura
 // Primer Bloque: Superbloque - Bitmap
 // A partir del segundo bloque: Inodos
@@ -18,8 +20,13 @@
 // struct_stat.h asi directamente le podemos pasar la info de los inodos sin hacer calculos extras en el medio
 
 #define SUPERBLOCK (superblock_t *) blocks
+#define DATA_BITMAP (bool *) (((superblock_t *) blocks) + 1)
+#define INODE_BITMAP DATA_BITMAP + ((SUPERBLOCK)->data_blocks_amount)
 #define BLOCK(n) (void *) ((byte *) blocks + BLOCK_SIZE * n)
 #define DIR_TYPE_MODE (__S_IFDIR | S_IRWXU | S_IRWXG | S_IROTH | S_IWOTH)
+
+#define EMPTY_DIRENTRY 0
+#define ROOT_INODE 1
 
 #define BLOCK_AMOUNT 6300
 // INODE_SIZE 256
@@ -32,8 +39,23 @@
 #define FS_SIZE                                                                \
 	(1 * BLOCK_SIZE + INODE_BLOCK_N * BLOCK_SIZE + BLOCK_AMOUNT * BLOCK_SIZE)
 
+
+void init_inode(inode_t* inode, mode_t mode);
+
+void init_dir(inode_t* directory, const ino_t dot, const ino_t dotdot);
+
+inode_t * get_root_inode(void);
+
+
 byte blocks[FS_SIZE] = { 0 };  // ~200 MiB
 
+int last_used_block = -0;
+
+
+/*  ============================================================= 
+ *  ========================== INIT =============================
+ *  =============================================================
+ */ 
 void
 init_superblock()
 {
@@ -46,60 +68,318 @@ init_superblock()
 	superblock->inode_start = 1;
 	superblock->data_start = INODE_BLOCK_N + 1;
 
-	superblock->root_inode = 1;
-}
-
-inode_t *
-get_inode(int inode_nmb)
-{
-	superblock_t *superblock = SUPERBLOCK;
-	inode_t *inode = BLOCK(superblock->inode_start);
-	return inode + inode_nmb;
-}
-
-inode_t *
-get_free_inode(int inode_nmb)
-{
-	superblock_t *superblock = SUPERBLOCK;
-	inode_t *inode = BLOCK(superblock->inode_start);
-
-
-	return inode + inode_nmb;
-}
-
-void *
-get_block_n(int block_n)
-{
-	superblock_t *superblock = SUPERBLOCK;
-	return BLOCK(superblock->data_start + block_n);
-}
-
-void
-init_block_dir(ino_t curr_inode, ino_t prev_inode)
-{
+	superblock->root_inode = ROOT_INODE;
 }
 
 void
 init_root_inode()
 {
-	superblock_t *superblock = SUPERBLOCK;
-	inode_t *root_inode = get_inode(superblock->root_inode);
+	bool * inode_bitmap = INODE_BITMAP;
+	inode_bitmap[ROOT_INODE] = true;
 
-	root_inode->type_mode = DIR_TYPE_MODE;
-	root_inode->user_id = getuid();
-	root_inode->group_id = getgid();
+	inode_t *root_inode = get_root_inode();
 
-	root_inode->last_access = time(NULL);
-	root_inode->last_modification = time(NULL);
-	root_inode->created_date = time(NULL);
+	init_inode(root_inode, DIR_TYPE_MODE);
+	root_inode->link_count = 1;
+	init_dir(root_inode, ROOT_INODE, ROOT_INODE);
+}
 
-	root_inode->size = 2 * sizeof(inode_t);
-	root_inode->link_count = 0;
-	root_inode->related_block[0] = 0;
-	root_inode->block_count = 1;
+void 
+init_bitmaps()
+{
+	superblock_t* superblock = SUPERBLOCK;
+	bool * data_bitmap = DATA_BITMAP;
+	memset(data_bitmap, false, superblock->data_blocks_amount);
+
+	bool * inode_bitmap = INODE_BITMAP;
+	memset(inode_bitmap, false, superblock->inode_amount);
+	inode_bitmap[0] = true;
 }
 
 void
 init_fs()
 {
+	init_superblock();
+	init_bitmaps();
+	init_root_inode();
+}
+
+/*  ============================================================= 
+ *  ========================= INODES ============================
+ *  =============================================================
+ */ 
+
+void
+init_inode(inode_t* inode, mode_t mode)
+{
+	time_t curr_time = time(NULL);
+
+	inode->type_mode = mode;
+	inode->user_id = getuid();
+	inode->group_id = getgid();
+
+	inode->last_access = curr_time;
+	inode->last_modification = curr_time;
+	inode->created_date = curr_time;
+
+	inode->size = 0;
+	inode->link_count = 0;
+}
+
+inode_t *
+get_root_inode()
+{
+	superblock_t *superblock = SUPERBLOCK;
+	inode_t *inode = BLOCK(superblock->inode_start);
+	return inode + superblock->root_inode;
+}
+
+inode_t *
+get_inode_n(int inode_nmb)
+{
+	superblock_t *superblock = SUPERBLOCK;
+	inode_t *inode = BLOCK(superblock->inode_start);
+	return inode + inode_nmb;
+}
+
+/*  ============================================================= 
+ *  ========================= BLOCKS ============================
+ *  =============================================================
+ */ 
+
+void *
+get_block_n(int block_n)
+{
+    superblock_t* superblock = SUPERBLOCK;
+    return BLOCK(superblock->data_start + block_n);
+}
+
+void *
+get_block(const inode_t* inode, int block_number)
+{
+    if (inode->block_count <= block_number)
+        return NULL;
+    if (block_number >= INODE_ONE_LI_INDEX){
+        int* indirect = (int *) get_block_n(inode->related_block[INODE_ONE_LI_INDEX]);
+        int new_index = block_number - INODE_ONE_LI_INDEX;
+        return get_block_n(indirect[new_index]);
+    }
+    return get_block_n(inode->related_block[block_number]);
+}
+
+int 
+search_free_block()
+{
+    bool *block_bitmap = DATA_BITMAP;
+    superblock_t *superblock = SUPERBLOCK;
+    for(int i = last_used_block; i < superblock->block_size; i++){
+		if (!block_bitmap[i]){
+            last_used_block = i;
+            return i;
+        }
+	}
+        
+    for(int i = 0; i < last_used_block; i++ ){
+		if (!block_bitmap[i]){
+            last_used_block = i;
+            return i;
+        }
+	}
+    return -ENOSPC;
+}
+
+void
+use_block(int block_n)
+{
+    bool *block_bitmap = DATA_BITMAP;
+    block_bitmap[block_n] = true;
+}
+
+void *
+allocate_next_block(inode_t* inode)
+{
+    if (inode->block_count >= MAX_DIRECT_BLOCK_COUNT + BLOCK_SIZE / sizeof(int))
+        return NULL;
+    int next_block = search_free_block();
+    if (next_block < 0)
+        return NULL;
+    if (inode->block_count <= MAX_DIRECT_BLOCK_COUNT)
+    {
+        use_block(next_block);
+        inode->related_block[inode->block_count - 1] = next_block;
+        inode->block_count++;
+        return get_block_n(next_block);
+    }
+
+    if (inode->block_count == INODE_ONE_LI_COUNT){
+        int indirect_block = search_free_block();
+        if (indirect_block < 0)
+            return NULL;
+        use_block(indirect_block);
+        inode->related_block[INODE_ONE_LI_INDEX] = indirect_block;
+    }
+
+    int * indirect = (int *) get_block_n(inode->related_block[INODE_ONE_LI_INDEX]);
+    int new_index = inode->block_count - INODE_ONE_LI_COUNT;
+    indirect[new_index] = next_block;
+
+    use_block(next_block);
+    inode->block_count++;
+    return get_block_n(next_block);
+}
+
+/*  ============================================================= 
+ *  ========================== DIR ==============================
+ *  =============================================================
+ */
+
+void
+init_dir(inode_t* directory, const ino_t dot, const ino_t dotdot)
+{
+	dentry_t base[] = {
+		{
+			.inode_number = dot,
+			.file_name = "."
+		},
+		{
+			.inode_number = dotdot,
+			.file_name = ".."
+		}
+	};
+
+	fiuba_write(directory, (char *) &base, sizeof(base), 0);
+}
+
+ino_t
+search_dir(const inode_t* directory, const char* inode_name)
+{
+    if (!(S_ISDIR(directory->type_mode)))
+        return -ENOTDIR;
+
+    int rem_size = directory->size;
+    int curr_block_searched = 0;
+    int curr_block = 0;
+    dentry_t* entry = (dentry_t *) get_block(directory, curr_block);
+
+    while(entry && rem_size > sizeof(dentry_t)){
+        if (entry->inode_number != EMPTY_DIRENTRY &&
+            strcmp(entry->file_name, inode_name) == 0)
+            return entry->inode_number;
+        entry++;
+        rem_size -= sizeof(dentry_t);
+        curr_block_searched += sizeof(dentry_t);
+        if (curr_block_searched >= BLOCK_SIZE){
+            curr_block++;
+            entry = (dentry_t *) get_block(directory, curr_block);
+            curr_block_searched = 0;
+        }
+    }
+    return -ENOENT;
+}
+
+/*  ============================================================= 
+ *  ========================== SEARCH ===========================
+ *  =============================================================
+ */ 
+
+int
+next_token(const char* path, int offset, char* buffer, int limit)
+{
+	int path_index = offset + 1; // Skip '/' that will be at the start
+	int i = 0;
+	while (
+		path && *path &&
+		path[path_index] != '/' &&
+		i <= limit
+	){
+		buffer[i] = path[path_index];
+		i++; path_index++;
+	}
+	return path_index;
+}
+
+int 
+search_inode(const char *path, inode_t** out)
+{
+    inode_t *curr_inode = get_inode_n(ROOT_INODE);
+
+    if (strcmp(path, "/") == 0){
+		out = &curr_inode;
+		return 0;
+	}
+
+    char buffer[MAX_FILE_NAME + 1] = {0};
+    int curr_offset = 0;
+    while (path[curr_offset]){
+        curr_offset = next_token(path, curr_offset, buffer, MAX_FILE_NAME);
+        int next_inode = search_dir(curr_inode, buffer);
+        if (next_inode < 0) return next_inode;
+        curr_inode = get_inode_n(next_inode);
+    }
+    out = &curr_inode;
+    return 0;
+}
+
+/*  ============================================================= 
+ *  ========================== READ =============================
+ *  =============================================================
+ */ 
+long
+fiuba_read(const inode_t* inode, char* buffer, size_t size, off_t offset)
+{
+    int block_n = offset / BLOCK_SIZE;
+    int curr_block_offset = offset % BLOCK_SIZE;
+    char *data = (char *) get_block(inode, block_n);
+    if(!data) return -EINVAL;
+    long read = 0;
+    while ( data &&                      // I have something to read
+            inode->size <= offset + read // What I'm reading is user data
+            && read <= size              // I'm not exceeding the buffer size   
+    )
+    {
+        buffer[read] = data[curr_block_offset];
+        curr_block_offset++;
+        if (curr_block_offset > BLOCK_SIZE){
+            block_n++;
+            data = (char *) get_block(inode, block_n);
+            curr_block_offset = 0;
+        }
+    }
+
+    return read;
+}
+
+/*  ============================================================= 
+ *  ========================= WRITE =============================
+ *  =============================================================
+ */
+long 
+fiuba_write(inode_t* inode, const char* buffer, size_t size, off_t offset)
+{
+    if (inode->size < offset)
+        return -EINVAL;
+    int block_n = offset / BLOCK_SIZE;
+    int curr_block_offset = offset % BLOCK_SIZE;
+    char *data = (char *) get_block(inode, block_n);
+    if (!data){
+        // If offset is exactly divisible by BLOCK_SIZE, the block will be NULL because it points
+        // to a new block that has to be allocated
+        data = (char *) allocate_next_block(inode);
+        if(!data){
+            // If allocation fails, it means that we have no more space
+            return -ENOSPC;
+        }
+    }
+    long written = 0;
+    while (data && written <= size){
+        data[curr_block_offset] = buffer[written];
+        curr_block_offset++;
+        written++;
+		inode->size++;
+        if (curr_block_offset > BLOCK_SIZE){
+            curr_block_offset = 0;
+            data = (char *) allocate_next_block(inode);
+        }
+    }
+    return written;
 }
