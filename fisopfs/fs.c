@@ -57,6 +57,10 @@ ino_t search_dir(const inode_t* directory, const char* inode_name);
 
 void link_to_inode(ino_t parent_n, ino_t child_n, const char* child_name);
 
+void deallocate_block(int block_n);
+
+void * get_block_n(int block_n);
+
 int search_parent(const char* path, ino_t *parent, int* name_offset_from_path);
 
 int chcount(char c, const char *s);
@@ -176,34 +180,6 @@ get_next_free_inode(mode_t mode, inode_t** out){
 }
 
 int
-search_parent(const char* path, ino_t *parent, int* name_offset_from_path)
-{
-    inode_t *curr_inode = get_inode_n(ROOT_INODE);
-
-    if (strcmp(path, "/") == 0){
-		return -EINVAL;
-	}
-
-    char buffer[MAX_FILE_NAME + 1] = {0};
-    int curr_offset = 0;
-    int rest = 1;
-    ino_t parent_inode;
-    while (rest){
-        curr_offset = next_token(path, curr_offset, buffer, MAX_FILE_NAME, &rest);
-        parent_inode = search_dir(curr_inode, buffer);
-        if (parent_inode < 0) return parent_inode;
-        curr_inode = get_inode_n(parent_inode);
-    }
-    
-    if (!(S_ISDIR(curr_inode->type_mode)))
-        return -ENOTDIR;
-
-    *parent = parent_inode;
-    *name_offset_from_path = curr_offset + 1;
-    return 0;
-}
-
-int
 new_inode(const char* path, mode_t mode, inode_t **out)
 {
     int name_offset;
@@ -223,6 +199,42 @@ new_inode(const char* path, mode_t mode, inode_t **out)
     new_inode->link_count = 1;
     *out = new_inode;
     return 0;
+}
+
+void
+deallocate_inode(ino_t inode_n)
+{
+	inode_t* inode = get_inode_n(inode_n);
+	if(inode->block_count >= MAX_INODE_BLOCK_PTR){
+		int * indirect = (int *) get_block_n(inode->related_block[INODE_ONE_LI_INDEX]);
+		int indirect_amount = inode->block_count - MAX_DIRECT_BLOCK_COUNT;
+		for (int i = 0; i < indirect_amount; i++){
+			deallocate_block(indirect[i]);
+		}
+	}
+	int limit = inode->block_count >= MAX_DIRECT_BLOCK_COUNT ? 
+					MAX_DIRECT_BLOCK_COUNT 
+					: inode->block_count;
+	for(int i = 0; i <= limit; i++){
+		deallocate_block(inode->related_block[i]);
+	}
+
+	bool* inode_bitmap = INODE_BITMAP;
+	inode_bitmap[inode_n] = false;
+}
+
+int
+destroy_inode(const char* path)
+{
+	int name_offset;
+	ino_t parent;
+	ino_t result = search_parent(path, &parent, &name_offset);
+	if (result < 0) return result;
+	ino_t to_delete = search_dir(get_inode_n(parent), path + name_offset);
+	if (to_delete < 0) return to_delete;
+
+	deallocate_inode(to_delete);
+	return 0;
 }
 
 /*  ============================================================= 
@@ -312,6 +324,44 @@ allocate_next_block(inode_t *inode)
 	return get_block_n(next_block);
 }
 
+void
+deallocate_block(int block_n)
+{
+	bool *block_bitmap = DATA_BITMAP;
+	block_bitmap[block_n] = false;
+}
+
+int
+dir_is_empty(inode_t* inode)
+{
+	if (!(S_ISDIR(inode->type_mode)))
+		return -ENOTDIR;
+
+	if (inode->size == 2 * sizeof(dentry_t))
+		return 1;
+
+	int curr_inode_block = 0;  // block idx
+	int searched_size = 0;     // esto es dentro del bloque
+	int remaining_size = inode->size;
+
+	dentry_t *entry = get_block(inode, curr_inode_block);
+
+	while (entry && remaining_size > sizeof(dentry_t)) {
+		if (!is_empty_dentry(entry)) return false;
+
+		entry++;
+
+		remaining_size -= sizeof(dentry_t);
+		searched_size += sizeof(dentry_t);
+
+		if (searched_size >= BLOCK_SIZE) {
+			curr_inode_block++;
+			entry = get_block(inode, curr_inode_block);
+			searched_size = 0;
+		}
+	}
+	return true;
+}
 /*  =============================================================
  *  ========================== DIR ==============================
  *  =============================================================
@@ -433,6 +483,34 @@ search_inode(const char *path, inode_t **out)
 	}
 	*out = curr_inode;
 	return 0;
+}
+
+int
+search_parent(const char* path, ino_t *parent, int* name_offset_from_path)
+{
+    inode_t *curr_inode = get_inode_n(ROOT_INODE);
+
+    if (strcmp(path, "/") == 0){
+		return -EINVAL;
+	}
+
+    char buffer[MAX_FILE_NAME + 1] = {0};
+    int curr_offset = 0;
+    int rest = 1;
+    ino_t parent_inode;
+    while (rest){
+        curr_offset = next_token(path, curr_offset, buffer, MAX_FILE_NAME, &rest);
+        parent_inode = search_dir(curr_inode, buffer);
+        if (parent_inode < 0) return parent_inode;
+        curr_inode = get_inode_n(parent_inode);
+    }
+    
+    if (!(S_ISDIR(curr_inode->type_mode)))
+        return -ENOTDIR;
+
+    *parent = parent_inode;
+    *name_offset_from_path = curr_offset + 1;
+    return 0;
 }
 
 /*  =============================================================

@@ -15,7 +15,7 @@
 #define MAX_INODE_BLOCK_PTR 13
 #define MAX_DIRECT_BLOCK_COUNT 12
 #define INODE_ONE_LI_COUNT 13
-#define INODE_ONE_LI_INDEX MAX_DIRECT_BLOCK_COUNT
+#define INODE_ONE_LI_INDEX 12
 
 #define DENTRY_EMPTY 0
 
@@ -80,6 +80,10 @@ void init_fs(void);
 inode_t *get_inode(ino_t);
 
 int search_inode(const char *path, inode_t **out);
+
+int destroy_inode(const char *path);
+
+int dir_is_empty(inode_t* inode);
 
 long fiuba_write(inode_t *inode, const char *buf, size_t size, off_t offset);
 
