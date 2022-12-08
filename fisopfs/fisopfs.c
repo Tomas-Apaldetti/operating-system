@@ -1,6 +1,7 @@
 #define FUSE_USE_VERSION 30
 
 #include <fuse.h>
+#include "fs.h"
 #include <stdio.h>
 #include <unistd.h>
 #include <sys/types.h>
@@ -185,33 +186,37 @@ fisopfs_fsync(const char *path, int isdatasync, struct fuse_file_info *fi)
 	return -ENOENT;
 }
 
-// static int
-// fisopfs_setxattr(const char *path, const char *name, const char *value, size_t size, int flags)
-// {
-// 	printf("[debug] fisopfs_setxattr \n");
-//  return -ENOENT;
-// }
+static int
+fisopfs_setxattr(const char *path,
+                 const char *name,
+                 const char *value,
+                 size_t size,
+                 int flags)
+{
+	printf("[debug] fisopfs_setxattr \n");
+	return -ENOENT;
+}
 
-// static int
-// fisopfs_getxattr(const char *path, const char *name, char *value, size_t size)
-// {
-// 	printf("[debug] fisopfs_getxattr \n");
-//  return -ENOENT;
-// }
+static int
+fisopfs_getxattr(const char *path, const char *name, char *value, size_t size)
+{
+	printf("[debug] fisopfs_getxattr \n");
+	return -ENOENT;
+}
 
-// static int
-// fisopfs_listxattr(const char *path, char *list, size_t size)
-// {
-// 	printf("[debug] fisopfs_listxattr \n");
-//  return -ENOENT;
-// }
+static int
+fisopfs_listxattr(const char *path, char *list, size_t size)
+{
+	printf("[debug] fisopfs_listxattr \n");
+	return -ENOENT;
+}
 
-// static int
-// fisopfs_removexattr(const char *path, const char *name)
-// {
-// 	printf("[debug] fisopfs_removexattr \n");
-//  return -ENOENT;
-// }
+static int
+fisopfs_removexattr(const char *path, const char *name)
+{
+	printf("[debug] fisopfs_removexattr \n");
+	return -ENOENT;
+}
 
 static int
 fisopfs_opendir(const char *path, struct fuse_file_info *fi)
@@ -261,7 +266,8 @@ static void *
 fisopfs_init(struct fuse_conn_info *conn)
 {
 	printf("[debug] fisopfs_init \n");
-	return (void *) -ENOENT;
+	// init_fs();
+	return (void *) 0;
 }
 
 static void
@@ -282,7 +288,6 @@ fisopfs_access(const char *path,
 static int
 fisopfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 {
-	inode_t inodo;
 	printf("[debug] fisopfs_create \n");
 	return -ENOENT;
 }
@@ -292,7 +297,6 @@ fisopfs_ftruncate(const char *path, off_t size, struct fuse_file_info *fi)
 {
 	printf("[debug] fisopfs_ftruncate \n");
 	return -ENOENT;
-	blkcnt_t
 }
 
 static int
@@ -427,7 +431,7 @@ static struct fuse_operations operations = {
 	.release = fisopfs_release,
 	.fsync = fisopfs_fsync,
 
-	.setxattr = fisopfs_setxattr, // no creo que se necesiten estos 4
+	.setxattr = fisopfs_setxattr,  // no creo que se necesiten estos 4
 	.getxattr = fisopfs_getxattr,
 	.listxattr = fisopfs_listxattr,
 	.removexattr = fisopfs_removexattr,
@@ -462,8 +466,6 @@ main(int argc, char *argv[])
 	for (int i = 0; i < argc; i++) {
 		printf("%s\n", argv[i]);
 	}
-
-	file_system_init();
 
 	return fuse_main(argc, argv, &operations, NULL);
 }

@@ -8,7 +8,10 @@ LDLIBS := $(shell pkg-config fuse --cflags --libs)
 # Name for the filesystem!
 FS_NAME := fisopfs
 
-all: build
+all: fs build
+
+fs: 
+	$(CC) $(CFLAGS) -g -c fs.c -o fs.o
 	
 build: $(FS_NAME)
 
