@@ -15,31 +15,23 @@
 static int
 fisopfs_getattr(const char *path, struct stat *st)
 {
-	// inode_t *inode;
-	// int response = search_inode(path, &inode);
-	// if (response != 0)
-	// 	return response;
+	printf("[debug] fisopfs_getattr with: %s\n", path);
 
-	// st->st_mode = inode->type_mode;
-	// st->st_uid = inode->user_id;
-	// st->st_gid = inode->group_id;
+	inode_t *inode;
+	int response = search_inode(path, &inode);
+	if (response != 0)
+		return response;
 
-	// if (strcmp(path, "/") == 0) {
-	// } else if (strcmp(path, "/fisop") == 0) {
-	// 	st->st_uid = 1818;
-	// 	st->st_mode = __S_IFREG | 0644;
-	// 	st->st_size = 2048;
-	// 	st->st_nlink = 1;
-	// } else {
-	// 	return -ENOENT;
-	// }
+	st->st_mode = inode->type_mode;
+	st->st_uid = inode->user_id;
+	st->st_gid = inode->group_id;
 
-	// st->st_size = inode->size;
-	// st->st_blocks = inode->block_count;
+	st->st_size = inode->size;
+	st->st_blocks = inode->block_count;
 
-	// st->st_atime = inode->last_access;
-	// st->st_mtime = inode->last_modification;
-	// st->st_ctime = inode->last_modification;
+	st->st_atime = inode->last_access;
+	st->st_mtime = inode->last_modification;
+	st->st_ctime = inode->last_modification;
 
 	return 0;
 }
@@ -152,8 +144,11 @@ fisopfs_fsync(const char *path, int isdatasync, struct fuse_file_info *fi)
 static int
 fisopfs_opendir(const char *path, struct fuse_file_info *fi)
 {
-	printf("[debug] fisopfs_opendir \n");
-	return -ENOENT;
+	printf("[debug] fisopfs_opendir with: %s \n", path);
+	printf("[debug] fisopfs_opendir flags: %i \n", fi->flags);
+
+	inode_t *inode;
+	return search_inode(path, &inode);  // ver de devolver el numero de inodo
 }
 
 static int
@@ -165,25 +160,22 @@ fisopfs_readdir(const char *path,
 {
 	printf("[debug] fisopfs_readdir(%s) \n", path);
 
-	// Los directorios '.' y '..'
-	filler(buffer, ".", NULL, 0);
-	filler(buffer, "..", NULL, 0);
+	inode_t *inode;
 
-	// Si nos preguntan por el directorio raiz, solo tenemos un archivo
-	if (strcmp(path, "/") == 0) {
-		filler(buffer, "fisop", NULL, 0);
-		return 0;
-	}
+	int response = search_inode(path, &inode);
+	if (response != 0)
+		return response;
 
-	return -ENOENT;
+	return fiuba_read_dir(inode, buffer, filler);
 }
 
 
 static int
 fisopfs_releasedir(const char *path, struct fuse_file_info *fi)
 {
-	printf("[debug] fisopfs_releasedir \n");
-	return -ENOENT;
+	printf("[debug] fisopfs_releasedir with: %s\n", path);
+	printf("[debug] fisopfs_releasedir flags: %i \n", fi->flags);
+	return 0;
 }
 
 static int
@@ -212,8 +204,8 @@ fisopfs_access(const char *path,
                int mask)  // en la docu de hmc aparece mode como mask, aunque no
                           // se corresponde con la syscall normal (donde figura mode)
 {
-	printf("[debug] fisopfs_access \n");
-	return -ENOENT;
+	printf("[debug] fisopfs_access with: %s\n", path);
+	return 0;
 }
 
 static int

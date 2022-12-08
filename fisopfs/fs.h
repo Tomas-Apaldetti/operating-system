@@ -2,9 +2,17 @@
 #define _FISOP_FS_
 
 #include <time.h>
-#include <sys/types.h>
 #include <stdint.h>
-#include <stdbool.h>
+#include <fuse.h>
+#include <stdio.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <sys/file.h>
+#include <string.h>
+#include <stdlib.h>
+#include <errno.h>
+
 
 #define KiB 1024
 #define MiB 1024 * KiB
@@ -76,7 +84,7 @@ typedef struct dentry {
 	char file_name[MAX_FILE_NAME];
 } dentry_t;
 
-typedef bool (*dentry_iterator)(dentry_t*, const char*);
+typedef bool (*dentry_iterator)(dentry_t *, const char *);
 
 void init_fs(void);
 
@@ -86,13 +94,17 @@ int search_inode(const char *path, inode_t **out);
 
 int destroy_inode(const char *path);
 
-int dir_is_empty(inode_t* inode);
+int dir_is_empty(inode_t *inode);
 
-ino_t iterate_over_dir(const inode_t *inode, const char *dir_name, dentry_iterator f);
+ino_t
+iterate_over_dir(const inode_t *inode, const char *dir_name, dentry_iterator f);
 
 long fiuba_write(inode_t *inode, const char *buf, size_t size, off_t offset);
 
 long fiuba_read(const inode_t *inode, char *buffer, size_t size, off_t offset);
+
+int fiuba_read_dir(inode_t *inode, void *buffer, fuse_fill_dir_t filler);
+
 
 // void set_type(inode_t *inode, mode_t type);
 
