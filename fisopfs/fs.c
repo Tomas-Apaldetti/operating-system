@@ -304,7 +304,7 @@ search_inode(const char *path, inode_t** out)
     inode_t *curr_inode = get_inode_n(ROOT_INODE);
 
     if (strcmp(path, "/") == 0){
-		out = &curr_inode;
+		*out = curr_inode;
 		return 0;
 	}
 
@@ -316,7 +316,7 @@ search_inode(const char *path, inode_t** out)
         if (next_inode < 0) return next_inode;
         curr_inode = get_inode_n(next_inode);
     }
-    out = &curr_inode;
+    *out = curr_inode;
     return 0;
 }
 
