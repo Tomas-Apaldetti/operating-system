@@ -51,10 +51,22 @@ void init_dir(inode_t *directory, const ino_t dot, const ino_t dotdot);
 
 inode_t *get_root_inode(void);
 
+int next_token(const char* path, int offset, char* buffer, int limit, int* rest);
+
+ino_t search_dir(const inode_t* directory, const char* inode_name);
+
+void link_to_inode(ino_t parent_n, ino_t child_n, const char* child_name);
+
+int search_parent(const char* path, ino_t *parent, int* name_offset_from_path);
+
+int chcount(char c, const char *s);
+
+inode_t * get_root_inode(void);
+
 
 byte blocks[FS_SIZE] = { 0 };  // ~200 MiB
 
-int last_used_block = -0;
+int last_used_block = -1;
 
 
 /*  =============================================================
@@ -146,7 +158,74 @@ get_inode_n(int inode_nmb)
 	return inode + inode_nmb;
 }
 
-/*  =============================================================
+
+ino_t
+get_next_free_inode(mode_t mode, inode_t** out){
+    superblock_t* superblock = SUPERBLOCK;
+    bool *inode_bitmap = INODE_BITMAP;
+    for (int i = 2; i < superblock->inode_amount; i++){
+        if (inode_bitmap[i]){
+            inode_bitmap[i] = true;
+            inode_t* inode = get_inode_n(i);
+            init_inode(inode, mode);
+            *out = inode;
+            return i;
+        }
+    }
+    return -ENOSPC;
+}
+
+int
+search_parent(const char* path, ino_t *parent, int* name_offset_from_path)
+{
+    inode_t *curr_inode = get_inode_n(ROOT_INODE);
+
+    if (strcmp(path, "/") == 0){
+		return -EINVAL;
+	}
+
+    char buffer[MAX_FILE_NAME + 1] = {0};
+    int curr_offset = 0;
+    int rest = 1;
+    ino_t parent_inode;
+    while (rest){
+        curr_offset = next_token(path, curr_offset, buffer, MAX_FILE_NAME, &rest);
+        parent_inode = search_dir(curr_inode, buffer);
+        if (parent_inode < 0) return parent_inode;
+        curr_inode = get_inode_n(parent_inode);
+    }
+    
+    if (!(S_ISDIR(curr_inode->type_mode)))
+        return -ENOTDIR;
+
+    *parent = parent_inode;
+    *name_offset_from_path = curr_offset + 1;
+    return 0;
+}
+
+int
+new_inode(const char* path, mode_t mode, inode_t **out)
+{
+    int name_offset;
+    ino_t parent;
+    int result = search_parent(path, &parent, &name_offset);
+    if (result < 0) {
+        *out = NULL;
+        return result;
+    }
+    inode_t* new_inode;
+    ino_t new_inode_n = get_next_free_inode(mode, &new_inode);
+    if (new_inode_n < 0 ) {
+        *out = NULL;
+        return -ENOSPC;
+    }
+    link_to_inode(parent, new_inode_n, path + name_offset);
+    new_inode->link_count = 1;
+    *out = new_inode;
+    return 0;
+}
+
+/*  ============================================================= 
  *  ========================= BLOCKS ============================
  *  =============================================================
  */
@@ -290,13 +369,36 @@ search_dir(const inode_t *inode, const char *dir_name)
 	return -ENOENT;
 }
 
-/*  =============================================================
+void 
+link_to_inode(ino_t parent_n, ino_t child_n, const char* child_name)
+{
+    dentry_t new_entry[1] = {
+        {
+            .file_name = {0},
+            .inode_number = child_n
+        }
+    };
+    strncpy(new_entry[0].file_name, child_name, MAX_FILE_NAME - 1);
+
+    inode_t* parent = get_inode_n(parent_n);
+    fiuba_write(parent,(char*)new_entry,MAX_FILE_NAME, parent->size);
+}
+
+/*  ============================================================= 
  *  ========================== SEARCH ===========================
  *  =============================================================
  */
 
 int
-next_token(const char *path, int offset, char *buffer, int limit)
+chcount(char c, const char *s)
+{
+    int count = 0;
+    for (int i = 0; s[i]; i++) if (s[i] == c) count++;
+    return count;
+}
+
+int
+next_token(const char* path, int offset, char* buffer, int limit, int* rest)
 {
 	int path_index = offset + 1;  // Skip '/' that will be at the start
 	int i = 0;
@@ -305,6 +407,7 @@ next_token(const char *path, int offset, char *buffer, int limit)
 		i++;
 		path_index++;
 	}
+    if (rest) *rest = chcount('/', path + path_index + 1);
 	return path_index;
 }
 
@@ -322,7 +425,7 @@ search_inode(const char *path, inode_t **out)
 	int curr_offset = 0;
 	while (path[curr_offset]) {
 		curr_offset =
-		        next_token(path, curr_offset, buffer, MAX_FILE_NAME);
+		        next_token(path, curr_offset, buffer, MAX_FILE_NAME, NULL);
 		int next_inode = search_dir(curr_inode, buffer);
 		if (next_inode < 0)
 			return next_inode;
