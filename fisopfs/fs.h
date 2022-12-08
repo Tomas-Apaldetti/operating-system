@@ -4,6 +4,7 @@
 #include <time.h>
 #include <sys/types.h>
 #include <stdint.h>
+#include <stdbool.h>
 
 #define KiB 1024
 #define MiB 1024 * KiB
@@ -75,6 +76,8 @@ typedef struct dentry {
 	char file_name[MAX_FILE_NAME];
 } dentry_t;
 
+typedef bool (*dentry_iterator)(dentry_t*, const char*);
+
 void init_fs(void);
 
 inode_t *get_inode(ino_t);
@@ -84,6 +87,8 @@ int search_inode(const char *path, inode_t **out);
 int destroy_inode(const char *path);
 
 int dir_is_empty(inode_t* inode);
+
+ino_t iterate_over_dir(const inode_t *inode, const char *dir_name, dentry_iterator f);
 
 long fiuba_write(inode_t *inode, const char *buf, size_t size, off_t offset);
 
