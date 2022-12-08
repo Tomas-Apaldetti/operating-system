@@ -270,7 +270,7 @@ search_dir(const inode_t *inode, const char *dir_name)
 	int searched_size = 0;     // esto es dentro del bloque
 	int remaining_size = inode->size;
 
-	dentry_t *entry = inode_get_block(inode, curr_inode_block);
+	dentry_t *entry = get_block(inode, curr_inode_block);
 
 	while (entry && remaining_size > sizeof(dentry_t)) {
 		if (is_dentry_searched(entry, dir_name))
@@ -283,7 +283,7 @@ search_dir(const inode_t *inode, const char *dir_name)
 
 		if (searched_size >= BLOCK_SIZE) {
 			curr_inode_block++;
-			entry = inode_get_block(inode, curr_inode_block);
+			entry = get_block(inode, curr_inode_block);
 			searched_size = 0;
 		}
 	}
