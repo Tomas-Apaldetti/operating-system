@@ -1,7 +1,6 @@
 #define FUSE_USE_VERSION 30
 
 #include <fuse.h>
-#include "fs.h"
 #include <stdio.h>
 #include <unistd.h>
 #include <sys/types.h>
@@ -11,25 +10,36 @@
 #include <stdlib.h>
 #include <errno.h>
 
+#include "fs.h"
+
 static int
 fisopfs_getattr(const char *path, struct stat *st)
 {
-	inode_t* inode;
-	int response = search_inode(path, &inode);
-	if (response != 0) return response;
+	// inode_t *inode;
+	// int response = search_inode(path, &inode);
+	// if (response != 0)
+	// 	return response;
 
-	st->st_mode = inode->type_mode;
-	st->st_uid = inode->user_id;
-	st->st_gid = inode->group_id;
+	// st->st_mode = inode->type_mode;
+	// st->st_uid = inode->user_id;
+	// st->st_gid = inode->group_id;
 
-	st->st_nlink = inode->link_count;
+	// if (strcmp(path, "/") == 0) {
+	// } else if (strcmp(path, "/fisop") == 0) {
+	// 	st->st_uid = 1818;
+	// 	st->st_mode = __S_IFREG | 0644;
+	// 	st->st_size = 2048;
+	// 	st->st_nlink = 1;
+	// } else {
+	// 	return -ENOENT;
+	// }
 
-	st->st_size = inode->size;
-	st->st_blocks = inode->block_count;
+	// st->st_size = inode->size;
+	// st->st_blocks = inode->block_count;
 
-	st->st_atime = inode->last_access;
-	st->st_mtime = inode->last_modification;
-	st->st_ctime = inode->last_modification;
+	// st->st_atime = inode->last_access;
+	// st->st_mtime = inode->last_modification;
+	// st->st_ctime = inode->last_modification;
 
 	return 0;
 }
@@ -37,7 +47,7 @@ fisopfs_getattr(const char *path, struct stat *st)
 static int
 fisopfs_mknod(const char *path, mode_t mode, dev_t rdev)
 {
-	//Make a normal file
+	// Make a normal file
 	printf("[debug] fisopfs_mknod \n");
 	return -ENOENT;
 }
@@ -45,7 +55,7 @@ fisopfs_mknod(const char *path, mode_t mode, dev_t rdev)
 static int
 fisopfs_mkdir(const char *path, mode_t mode)
 {
-	//Make a directory
+	// Make a directory
 	printf("[debug] fisopfs_mkdir \n");
 	return -ENOENT;
 }
@@ -53,7 +63,7 @@ fisopfs_mkdir(const char *path, mode_t mode)
 static int
 fisopfs_unlink(const char *path)
 {
-	//Remove a file
+	// Remove a file
 	printf("[debug] fisopfs_unlink \n");
 	return -ENOENT;
 }
@@ -61,7 +71,7 @@ fisopfs_unlink(const char *path)
 static int
 fisopfs_rmdir(const char *path)
 {
-	//Remove a directory
+	// Remove a directory
 	printf("[debug] fisopfs_rmdir \n");
 	return -ENOENT;
 }
@@ -187,7 +197,7 @@ static void *
 fisopfs_init(struct fuse_conn_info *conn)
 {
 	printf("[debug] fisopfs_init \n");
-	// init_fs();
+	init_fs();
 	return (void *) 0;
 }
 
@@ -331,7 +341,7 @@ static struct fuse_operations operations = {
 
 	.init = fisopfs_init,
 
-	.getattr = fisopfs_getattr,  
+	.getattr = fisopfs_getattr,
 	.access = fisopfs_access,
 	.utimens = fisopfs_utimens,
 
@@ -354,12 +364,12 @@ static struct fuse_operations operations = {
 	.flush = fisopfs_flush,
 	.fsync = fisopfs_fsync,
 
-	.lock = fisopfs_lock, //Prolly not
-	
-	.write_buf = fisopfs_write_buf, //What is the difference
+	.lock = fisopfs_lock,  // Prolly not
+
+	.write_buf = fisopfs_write_buf,  // What is the difference
 	.read_buf = fisopfs_read_buf,
 
-	.fallocate = fisopfs_fallocate, //Probably not, but not too difficult
+	.fallocate = fisopfs_fallocate,  // Probably not, but not too difficult
 
 	.destroy = fisopfs_destroy,
 };
