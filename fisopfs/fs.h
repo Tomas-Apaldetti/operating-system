@@ -91,9 +91,9 @@ inode_t *get_inode(ino_t);
 
 int search_inode(const char *path, inode_t **out);
 
-int new_inode(const char *path, mode_t mode, inode_t **out)
+int new_inode(const char *path, mode_t mode, inode_t **out);
 
-int fiuba_unlink(const char* path)
+int fiuba_unlink(const char* path);
 
 int dir_is_empty(inode_t *inode);
 
@@ -106,6 +106,10 @@ long fiuba_write(inode_t *inode, const char *buf, size_t size, off_t offset);
 long fiuba_read(const inode_t *inode, char *buffer, size_t size, off_t offset);
 
 int move_inode(const char* from, const char* to);
+
+void notify_access(inode_t* inode, time_t* time);
+
+void notify_modif(inode_t* inode, time_t* time);
 
 int exchange_inodes(const char* path_one, const char* path_two);
 

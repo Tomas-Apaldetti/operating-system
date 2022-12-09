@@ -149,6 +149,28 @@ init_inode(inode_t *inode, mode_t mode)
 	inode->link_count = 0;
 }
 
+void 
+notify_access(inode_t* inode, time_t* t)
+{
+	time_t new_time = time(NULL);
+	if(!inode) return;
+	if(t){
+		new_time = *t;
+	}
+	inode->last_access = new_time;
+}
+
+void 
+notify_modif(inode_t* inode, time_t* t)
+{
+	time_t new_time = time(NULL);
+	if(!inode) return;
+	if(t){
+		new_time = *t;
+	}
+	inode->last_modification = new_time;
+}
+
 inode_t *
 get_root_inode()
 {
@@ -310,7 +332,7 @@ move_inode(const char* from, const char* to)
 	int result = insert_into_parent(to, to_delete);
 	if (result < 0){
 		// Guaranteed not to fail, because it was recently removed from it.
-		int _ = insert_into_parent(from, to_delete);
+		insert_into_parent(from, to_delete);
 	}
 	return result;
 }
@@ -324,11 +346,12 @@ exchange_inodes(const char* path_one, const char* path_two)
 	if(inode_one < 0) return inode_one;
 	ino_t inode_two = remove_from_parent(path_two);
 	if(inode_two < 0 ){
-		int _ = insert_into_parent(path_one, inode_one);
+		insert_into_parent(path_one, inode_one);
 		return inode_two;
 	}
-	int _ = insert_into_parent(path_one, inode_two);
-	int _ = insert_into_parent(path_two, inode_one);
+	insert_into_parent(path_one, inode_two);
+	insert_into_parent(path_two, inode_one);
+	return 0;
 }
 
 int

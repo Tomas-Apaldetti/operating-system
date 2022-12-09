@@ -73,7 +73,7 @@ static int
 fisopfs_rmdir(const char *path)
 {
 	inode_t* inode;
-	int res = search_inode(res, &inode);
+	int res = search_inode(path, &inode);
 	if (res < 0) return res;
 	int is_empty = dir_is_empty(inode);
 	if (is_empty < 0) return is_empty;
