@@ -12,6 +12,15 @@
 
 #include "fs.h"
 
+#define RWRWR (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH)
+
+#define FILE_MODE RWRWR
+#define DIR_MODE (__S_IFDIR | RWRWR)
+
+#define PERSIST_FILE_NAME 3
+
+int persist();
+
 static int
 fisopfs_getattr(const char *path, struct stat *st)
 {
@@ -39,33 +48,37 @@ fisopfs_getattr(const char *path, struct stat *st)
 static int
 fisopfs_mknod(const char *path, mode_t mode, dev_t rdev)
 {
-	// Make a normal file
-	printf("[debug] fisopfs_mknod \n");
-	return -ENOENT;
+	inode_t* inode;
+	int result = new_inode(path, mode, &inode);
+	if (result < 0) return result;
+	return 0;
 }
 
 static int
 fisopfs_mkdir(const char *path, mode_t mode)
 {
-	// Make a directory
-	printf("[debug] fisopfs_mkdir \n");
-	return -ENOENT;
+	inode_t* inode;
+	int result = new_inode(path, mode, &inode);
+	if (result < 0) return result;
+	return 0;
 }
 
 static int
 fisopfs_unlink(const char *path)
 {
-	// Remove a file
-	printf("[debug] fisopfs_unlink \n");
-	return -ENOENT;
+	return fiuba_unlink(path);
 }
 
 static int
 fisopfs_rmdir(const char *path)
 {
-	// Remove a directory
-	printf("[debug] fisopfs_rmdir \n");
-	return -ENOENT;
+	inode_t* inode;
+	int res = search_inode(res, &inode);
+	if (res < 0) return res;
+	int is_empty = dir_is_empty(inode);
+	if (is_empty < 0) return is_empty;
+	if (is_empty) return fiuba_unlink(path);
+	return -EINVAL;
 }
 
 static int
@@ -78,8 +91,10 @@ fisopfs_rename(const char *from, const char *to)
 static int
 fisopfs_truncate(const char *path, off_t size)
 {
-	printf("[debug] fisopfs_truncate \n");
-	return -ENOENT;
+	inode_t* inode;
+	int res = search_inode(path, &inode);
+	if (res < 0) return res;
+	return truncate_inode(inode, size);
 }
 
 static int
@@ -96,9 +111,11 @@ fisopfs_read(const char *path,
              off_t offset,
              struct fuse_file_info *fi)
 {
-	printf("[debug] fisopfs_read(%s, %lu, %lu)\n", path, offset, size);
-
-	return size;
+	// TODO: check permissions
+	inode_t* inode;
+	int res = search_inode(path, &inode);
+	if (res < 0) return res;
+	return fiuba_read(inode, buffer, size, offset);
 }
 
 static int
@@ -108,8 +125,13 @@ fisopfs_write(const char *path,
               off_t offset,
               struct fuse_file_info *fi)
 {
-	printf("[debug] fisopfs_write \n");
-	return -ENOENT;
+	// TODO: check permissions
+	inode_t* inode;
+	int res = search_inode(path, &inode);
+	if (res < 0) return res;
+	if (S_ISDIR(inode->type_mode))
+        return -EINVAL; 
+	return fiuba_write(inode, buf, size, offset);
 }
 
 static int
@@ -122,9 +144,12 @@ fisopfs_statfs(const char *path, struct statvfs *stbuf)
 static int
 fisopfs_flush(const char *path, struct fuse_file_info *fi)
 {
-	// Save to file
-	printf("[debug] fisopfs_flush \n");
-	return -ENOENT;
+	// I don't think this have to be done here, but oh well.
+	int res = persist();
+	if (res){
+		printf("Can't persist the FS");
+	}
+	return res;
 }
 
 static int
@@ -189,15 +214,16 @@ fisopfs_fsyncdir(const char *path, int isdatasync, struct fuse_file_info *fi)
 static void *
 fisopfs_init(struct fuse_conn_info *conn)
 {
-	printf("[debug] fisopfs_init \n");
-	init_fs();
 	return (void *) 0;
 }
 
 static void
 fisopfs_destroy(void *private_data)
 {
-	printf("[debug] fisopfs_destroy \n");
+	int res = persist();
+	if (res){
+		printf("Can't persist the FS");
+	}
 }
 
 static int
@@ -367,6 +393,33 @@ static struct fuse_operations operations = {
 	.destroy = fisopfs_destroy,
 };
 
+int
+load_persist(const char* file_name){
+	int res = open(file_name, O_RDONLY);
+	if (res < 0) return -EIO;
+	res = deserialize(res);
+	if (res < 0){
+		close(res);
+		return -EIO;
+	};
+	close(res);
+	return 0;
+}
+
+int
+persist()
+{
+	// TODO: save it in argv?
+	int res = open("~/.fisopfs/fisopfs", O_WRONLY | O_CREAT, 664);
+	if (res < 0) return -EIO;
+	res = serialize(res);
+	if (res < 0){
+		close(res);
+		return -EIO;
+	};
+	close(res);
+	return 0;
+}
 
 int
 main(int argc, char *argv[])
@@ -374,6 +427,12 @@ main(int argc, char *argv[])
 	for (int i = 0; i < argc; i++) {
 		printf("%s\n", argv[i]);
 	}
-
+	init_fs();
+	if(argc >= PERSIST_FILE_NAME){
+		if (load_persist < 0) {
+			perror("Error while trying to load the persisted information");
+			return -EIO;
+		}
+	}
 	return fuse_main(argc, argv, &operations, NULL);
 }

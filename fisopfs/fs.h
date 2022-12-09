@@ -21,6 +21,7 @@
 #define BLOCK_SIZE 32 * KiB
 
 #define MAX_FILE_NAME 256
+#define MAX_PATH_LEN 2048
 
 #define MAX_INODE_BLOCK_PTR 13
 #define MAX_DIRECT_BLOCK_COUNT 12
@@ -90,15 +91,23 @@ inode_t *get_inode(ino_t);
 
 int search_inode(const char *path, inode_t **out);
 
-int destroy_inode(const char *path);
+int new_inode(const char *path, mode_t mode, inode_t **out)
+
+int fiuba_unlink(const char* path)
 
 int dir_is_empty(inode_t *inode);
 
 ino_t iterate_over_dir(const inode_t *inode, void *param, dentry_iterator f);
 
+int truncate_inode(inode_t* inode, off_t size);
+
 long fiuba_write(inode_t *inode, const char *buf, size_t size, off_t offset);
 
 long fiuba_read(const inode_t *inode, char *buffer, size_t size, off_t offset);
+
+int move_inode(const char* from, const char* to);
+
+int exchange_inodes(const char* path_one, const char* path_two);
 
 int deserialize(int fd);
 

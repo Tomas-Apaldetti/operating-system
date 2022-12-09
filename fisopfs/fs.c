@@ -28,7 +28,7 @@
 #define INODE_BLOCKS BLOCK(SUPERBLOCK->inode_start)
 #define DATA_BLOCKS BLOCK(SUPERBLOCK->data_start)
 
-#define DIR_TYPE_MODE (__S_IFDIR | S_IRWXU | S_IRWXG | S_IROTH | S_IWOTH)
+#define DIR_TYPE_MODE (__S_IFDIR | S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH)
 
 #define EMPTY_DIRENTRY 0
 #define ROOT_INODE 1
@@ -56,7 +56,7 @@ int next_token(const char *path, int offset, char *buffer, int limit, int *rest)
 
 ino_t search_dir(const inode_t *directory, const char *inode_name);
 
-void link_to_inode(ino_t parent_n, ino_t child_n, const char *child_name);
+int link_to_inode(ino_t parent_n, ino_t child_n, const char *child_name);
 
 void deallocate_block(int block_n);
 
@@ -185,6 +185,10 @@ get_next_free_inode(mode_t mode, inode_t **out)
 int
 new_inode(const char *path, mode_t mode, inode_t **out)
 {
+	if (strlen(path) > MAX_PATH_LEN){
+		*out = NULL;
+		return -EINVAL;
+	}
 	int name_offset;
 	ino_t parent;
 	int result = search_parent(path, &parent, &name_offset);
@@ -198,12 +202,16 @@ new_inode(const char *path, mode_t mode, inode_t **out)
 		*out = NULL;
 		return -ENOSPC;
 	}
-	link_to_inode(parent, new_inode_n, path + name_offset);
+	if (link_to_inode(parent, new_inode_n, path + name_offset) < 0){
+		bool *inode_bitmap = INODE_BITMAP;
+		inode_bitmap[new_inode_n] = false;
+		*out = NULL;
+		return -EINVAL;
+	}
 	new_inode->link_count = 1;
 	*out = new_inode;
 	return 0;
 }
-
 
 void
 deallocate_blocks_from_inode(inode_t* inode, int block_dest)
@@ -252,14 +260,14 @@ truncate_inode(inode_t* inode, off_t size)
 	if (inode->size < size) return -EINVAL;
 
 	int block_n = size / BLOCK_SIZE;
-	block_n = size % BLOCK_SIZE != 0 ? 1 : 0;
+	block_n += size % BLOCK_SIZE != 0 ? 1 : 0;
 	deallocate_blocks_from_inode(inode, block_n);
 	inode->size = size;
 	return 0;
 }
 
 int
-destroy_inode(const char* path)
+remove_from_parent(const char* path)
 {
 	int name_offset;
 	ino_t parent;
@@ -267,10 +275,60 @@ destroy_inode(const char* path)
 	if (result < 0)
 		return result;
 	ino_t to_delete = unlink_inode(get_inode_n(parent), path + name_offset);
+	return to_delete;
+}
+
+int
+insert_into_parent(const char* path, ino_t inode_n)
+{
+	int name_offset;
+	ino_t parent;
+	int result = search_parent(path, &parent, &name_offset);
+	if (result < 0) return result;
+	return link_to_inode(parent, inode_n, path + name_offset);
+}
+
+int
+fiuba_unlink(const char* path)
+{
+	ino_t to_delete = remove_from_parent(path);
 	if (to_delete < 0)
 		return to_delete;
 	substract_link(to_delete);
 	return 0;
+}
+
+int
+move_inode(const char* from, const char* to)
+{
+	// Remove from old
+	ino_t to_delete = remove_from_parent(from);
+	if (to_delete < 0)
+		return to_delete;
+
+	// Link to new
+	int result = insert_into_parent(to, to_delete);
+	if (result < 0){
+		// Guaranteed not to fail, because it was recently removed from it.
+		int _ = insert_into_parent(from, to_delete);
+	}
+	return result;
+}
+
+
+int
+exchange_inodes(const char* path_one, const char* path_two)
+{
+	// All the insert operations here are guaranteed not to fail due to name collission.
+	ino_t inode_one = remove_from_parent(path_one);
+	if(inode_one < 0) return inode_one;
+	ino_t inode_two = remove_from_parent(path_two);
+	if(inode_two < 0 ){
+		int _ = insert_into_parent(path_one, inode_one);
+		return inode_two;
+	}
+	int _ = insert_into_parent(path_one, inode_two);
+	int _ = insert_into_parent(path_two, inode_one);
 }
 
 int
@@ -454,7 +512,7 @@ is_dentry_searched(dentry_t *dentry, void *_dir_name)
 {
 	char *dir_name = (char *) _dir_name;
 	return (!is_empty_dentry(dentry) &&
-	        (strcmp(dentry->file_name, dir_name) == 0));
+	        (strncmp(dentry->file_name, dir_name, MAX_FILE_NAME - 1) == 0));
 }
 
 int
@@ -468,8 +526,8 @@ dir_is_empty(inode_t *inode)
 
 	int result = iterate_over_dir(inode, NULL, is_not_empty_dentry);
 	if (result < 0)
-		return 1;
-	return 0;
+		return 0;
+	return 1;
 }
 
 bool
@@ -533,14 +591,19 @@ search_dir(const inode_t *inode, const char *dir_name)
 	return iterate_over_dir(inode, (void *) dir_name, is_dentry_searched);
 }
 
-void
+int
 link_to_inode(ino_t parent_n, ino_t child_n, const char *child_name)
 {
-	dentry_t new_entry[1] = { { .file_name = { 0 }, .inode_number = child_n } };
-	strncpy(new_entry[0].file_name, child_name, MAX_FILE_NAME - 1);
+	if (strlen(child_name) > MAX_FILE_NAME - 1) return -EINVAL;
 
 	inode_t *parent = get_inode_n(parent_n);
+	// Already exists, fail
+	if(search_dir(parent, child_name) > 0) return -EINVAL;
+	dentry_t new_entry[1] = { { .file_name = { 0 }, .inode_number = child_n } };
+	strncpy(new_entry[0].file_name, child_name, MAX_FILE_NAME - 1);
+	
 	fiuba_write(parent, (char *) new_entry, MAX_FILE_NAME, parent->size);
+	return 0;
 }
 
 /*  =============================================================
@@ -558,6 +621,16 @@ chcount(char c, const char *s)
 	return count;
 }
 
+
+/// @brief Copies into the buffer at most limit characters. Zero terminates the string resultant in the buffer. 
+/// Is responsability of the caller to ensure that the buffer has enough space for the new string. (Should be at least limit + 1 size)
+/// @param path String that will be copied until the next token
+/// @param offset offset into the path. Zero index, assumes that always start with '/'
+/// @param buffer Buffer where the string will be copied
+/// @param limit At most limit bytes copied
+/// @param rest Pointer to an int, where, should exist, the amount of '/' rest in the path should be saved.
+/// @return -1 in case the token is larger than limit (In other words, if any other char other than '/' or '\0' is in the new offset).
+/// An integer greater than 0, showing the offset position into the path of the next separator
 int
 next_token(const char *path, int offset, char *buffer, int limit, int *rest)
 {
@@ -568,6 +641,9 @@ next_token(const char *path, int offset, char *buffer, int limit, int *rest)
 		i++;
 		path_index++;
 	}
+	buffer[i + 1] = '\0';
+	bool token_finished = path[path_index] == '/' || path[path_index] == '\0';
+	if(i == limit && !token_finished) return -1;
 	if (rest)
 		*rest = chcount('/', path + path_index + 1);
 	return path_index;
@@ -588,6 +664,7 @@ search_inode(const char *path, inode_t **out)
 	while (path[curr_offset]) {
 		curr_offset =
 		        next_token(path, curr_offset, buffer, MAX_FILE_NAME, NULL);
+		if (curr_offset < 0) return -EINVAL;
 		int next_inode = search_dir(curr_inode, buffer);
 		if (next_inode < 0)
 			return next_inode;
@@ -612,6 +689,7 @@ search_parent(const char* path, ino_t *parent, int* name_offset_from_path)
     ino_t parent_inode;
     while (rest){
         curr_offset = next_token(path, curr_offset, buffer, MAX_FILE_NAME, &rest);
+		if (curr_offset < 0) return -EINVAL;
         parent_inode = search_dir(curr_inode, buffer);
         if (parent_inode < 0) return parent_inode;
         curr_inode = get_inode_n(parent_inode);
