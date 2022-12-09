@@ -158,15 +158,16 @@ fisopfs_readdir(const char *path,
                 off_t offset,
                 struct fuse_file_info *fi)
 {
-	printf("[debug] fisopfs_readdir(%s) \n", path);
+	// printf("[debug] fisopfs_readdir(%s) \n", path);
 
-	inode_t *inode;
+	// inode_t *inode;
 
-	int response = search_inode(path, &inode);
-	if (response != 0)
-		return response;
+	// int response = search_inode(path, &inode);
+	// if (response != 0)
+	// 	return response;
 
-	return fiuba_read_dir(inode, buffer, filler);
+	// return fiuba_read_dir(inode, buffer, filler);
+	return 0;
 }
 
 

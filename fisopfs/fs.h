@@ -75,9 +75,6 @@ typedef struct inode {
 	nlink_t link_count;
 	int related_block[MAX_INODE_BLOCK_PTR];  // 12 directos, 1 indirecto
 	blkcnt_t block_count;
-
-	// Optimization
-	ino_t next_free;
 } inode_t;
 
 typedef struct dentry {
@@ -85,7 +82,7 @@ typedef struct dentry {
 	char file_name[MAX_FILE_NAME];
 } dentry_t;
 
-typedef bool (*dentry_iterator)(dentry_t *, const char *);
+typedef bool (*dentry_iterator)(dentry_t *, void *);
 
 void init_fs(void);
 
@@ -97,8 +94,7 @@ int destroy_inode(const char *path);
 
 int dir_is_empty(inode_t *inode);
 
-ino_t
-iterate_over_dir(const inode_t *inode, const char *dir_name, dentry_iterator f);
+ino_t iterate_over_dir(const inode_t *inode, void *param, dentry_iterator f);
 
 long fiuba_write(inode_t *inode, const char *buf, size_t size, off_t offset);
 

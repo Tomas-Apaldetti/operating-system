@@ -48,6 +48,8 @@ void init_inode(inode_t *inode, mode_t mode);
 
 void init_dir(inode_t *directory, const ino_t dot, const ino_t dotdot);
 
+void * get_block(const inode_t *inode, int block_number);
+
 inode_t *get_root_inode(void);
 
 int next_token(const char *path, int offset, char *buffer, int limit, int *rest);
@@ -442,14 +444,15 @@ is_empty_dentry(dentry_t *dentry)
 }
 
 bool
-is_not_empty_dentry(dentry_t *dentry, const char *_)
+is_not_empty_dentry(dentry_t *dentry, void *_)
 {
 	return !is_empty_dentry(dentry);
 }
 
 bool
-is_dentry_searched(dentry_t *dentry, const char *dir_name)
+is_dentry_searched(dentry_t *dentry, void *_dir_name)
 {
+	char *dir_name = (char *) _dir_name;
 	return (!is_empty_dentry(dentry) &&
 	        (strcmp(dentry->file_name, dir_name) == 0));
 }
@@ -470,8 +473,9 @@ dir_is_empty(inode_t *inode)
 }
 
 bool
-remove_dentry(dentry_t *entry, const char *dir_name)
+remove_dentry(dentry_t *entry, void *_dir_name)
 {
+	char *dir_name = (char *) _dir_name;
 	if (is_dentry_searched(entry, dir_name)) {
 		entry->inode_number = EMPTY_DIRENTRY;
 		return true;
@@ -482,11 +486,20 @@ remove_dentry(dentry_t *entry, const char *dir_name)
 ino_t
 unlink_inode(const inode_t *inode, const char *dir_name)
 {
-	return iterate_over_dir(inode, dir_name, remove_dentry);
+	return iterate_over_dir(inode, (void *) dir_name, remove_dentry);
 }
 
+/// @brief Iterator over a Inode that is a directory. 
+/// For each entry in the directory calls the function with the dentry and the param passed by parameter.
+/// Iterates until the function return true or until the directory is fully consumed.
+/// @param inode Directory inode
+/// @param param Param passed to the function. Responsability of the caller to know what the pointer represents. 
+/// @param f Function called for each dentry in the directory
+/// @return -ENOTDIR should the inode not be a directory.
+/// -ENOENT should the directory be fully consumed in the iteration
+/// Number greater than 0 should, indicating the inode number of the dentry that made the function return true.
 ino_t
-iterate_over_dir(const inode_t *inode, const char *dir_name, dentry_iterator f)
+iterate_over_dir(const inode_t *inode, void * param, dentry_iterator f)
 {
 	if (!(S_ISDIR(inode->type_mode)))
 		return -ENOTDIR;
@@ -497,7 +510,7 @@ iterate_over_dir(const inode_t *inode, const char *dir_name, dentry_iterator f)
 
 	dentry_t *entry = get_block(inode, curr_inode_block);
 	while (entry && remaining_size > sizeof(dentry_t)) {
-		if (f(entry, dir_name))
+		if (f(entry, param))
 			return entry->inode_number;
 
 		entry++;
@@ -517,7 +530,7 @@ iterate_over_dir(const inode_t *inode, const char *dir_name, dentry_iterator f)
 ino_t
 search_dir(const inode_t *inode, const char *dir_name)
 {
-	return iterate_over_dir(inode, dir_name, is_dentry_searched);
+	return iterate_over_dir(inode, (void *) dir_name, is_dentry_searched);
 }
 
 void
