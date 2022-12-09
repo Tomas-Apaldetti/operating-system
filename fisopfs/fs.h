@@ -104,7 +104,9 @@ long fiuba_write(inode_t *inode, const char *buf, size_t size, off_t offset);
 
 long fiuba_read(const inode_t *inode, char *buffer, size_t size, off_t offset);
 
-int fiuba_read_dir(inode_t *inode, void *buffer, fuse_fill_dir_t filler);
+int deserialize(int fd);
+
+int serialize(int fd);
 
 
 // void set_type(inode_t *inode, mode_t type);

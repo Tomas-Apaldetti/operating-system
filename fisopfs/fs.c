@@ -271,6 +271,54 @@ destroy_inode(const char* path)
 	return 0;
 }
 
+int
+deserialize_inode(int fd, ino_t inode_n)
+{
+	inode_t* inode = get_inode_n(inode_n);
+	size_t read_size = sizeof(inode_t);
+	ssize_t result = read(fd, inode, read_size);
+	if (result < read_size) return -EIO;
+
+	size_t data_left_to_read = inode->size;
+	size_t curr_offset = 0;
+	while(data_left_to_read){
+		char buffer[BLOCK_SIZE];
+		size_t this_read_size = data_left_to_read >= BLOCK_SIZE ? BLOCK_SIZE : data_left_to_read;
+		ssize_t result = read(fd, buffer, this_read_size);
+		if (result < this_read_size) return -EIO;
+		fiuba_write(inode,buffer,this_read_size, curr_offset);
+
+		data_left_to_read -= this_read_size;
+		curr_offset += this_read_size;
+	}
+	return 0;
+}
+
+
+int
+serialize_inode(int fd, ino_t inode_n)
+{
+	inode_t* inode = get_inode_n(inode_n);
+	size_t write_size = sizeof(inode_t);
+	ssize_t result = write(fd, inode, write_size);
+	if (result < write_size) return -EIO;
+
+	size_t data_written = 0;
+	int curr_block = 0;
+	while(data_written < inode->size){
+		char * data = (char *) get_block(inode, curr_block);
+		size_t this_write_size = inode->size - data_written >= BLOCK_SIZE ? 
+									BLOCK_SIZE : 
+									inode->size - data_written;
+		size_t result = write(fd, data, this_write_size);
+		if (result < this_write_size) return -EIO;
+
+		data_written += this_write_size;
+		curr_block++;
+	}
+	return 0;
+}
+
 /*  =============================================================
  *  ========================= BLOCKS ============================
  *  =============================================================
@@ -631,4 +679,64 @@ fiuba_write(inode_t *inode, const char *buffer, size_t size, off_t offset)
 		}
 	}
 	return written;
+}
+
+/*  =============================================================
+ *  ==================== SERIALIZATION ==========================
+ *  =============================================================
+ */
+
+/// @brief Deserializes a given file that represents the FS. 
+/// First is Inode Bitmap. Then each inode is directly adjacent to the data that it contained.
+/// The inode struct is saved as is, but the data block pointers are simply left for padding.
+/// It assumes a good formatting of the file and that the file it's not corrupted, and do, at least, contain all the information of the inodes.
+/// @param fd The file descriptor to the file representing the FS.
+/// @return -EIO in an error(early termination of the file or IO error on the guest FS). errno is not touched. 
+/// 0 if it deseriales correctly
+int
+deserialize(int fd)
+{
+	ssize_t operation_result = 0;
+	size_t operation_read_size = 0;
+	superblock_t* superblock = SUPERBLOCK;
+	bool * inode_bitmap = INODE_BITMAP;
+	
+	// Read Inode Bitmap to know the bitmap state
+	operation_read_size = superblock->inode_amount * sizeof(bool);
+	operation_result = read(fd, inode_bitmap, operation_read_size);
+	if (operation_result < operation_read_size) return -EIO;
+
+	for (int i = 0; i < superblock->inode_amount; i++){
+		operation_result = deserialize_inode(fd, i);
+		if (operation_result < 0) return operation_result;
+	}
+
+	return 0;
+}
+
+/// @brief Serializes the current state of the FS.
+///
+/// The order of the final file is the given: INODE BMP,{ INODE i, [data of INODE i] }
+/// i between 0 and superblock->inode_amount
+/// @param fd File descriptor to where the representation will be saved
+/// @return -EIO in an error(IO error on the guest FS). errno is not touched. 
+/// 0 if it serializes correctly
+int
+serialize(int fd)
+{
+	ssize_t operation_result = 0;
+	size_t operation_write_size = 0;
+	superblock_t * superblock = SUPERBLOCK;
+	bool * inode_bitmap = INODE_BITMAP;
+
+	operation_write_size = superblock->inode_amount * sizeof(bool);
+	operation_result = write(fd, inode_bitmap, operation_write_size);
+	if (operation_result < operation_write_size) return -EIO;
+
+	for (int i = 0; i < superblock->inode_amount; i++){
+		operation_result = serialize_inode(fd, i);
+		if (operation_result < 0) return operation_result;
+	}
+
+	return 0;
 }
