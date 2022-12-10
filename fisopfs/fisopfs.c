@@ -48,18 +48,20 @@ fisopfs_getattr(const char *path, struct stat *st)
 static int
 fisopfs_mknod(const char *path, mode_t mode, dev_t rdev)
 {
-	inode_t* inode;
+	inode_t *inode;
 	int result = new_inode(path, mode, &inode);
-	if (result < 0) return result;
+	if (result < 0)
+		return result;
 	return 0;
 }
 
 static int
 fisopfs_mkdir(const char *path, mode_t mode)
 {
-	inode_t* inode;
+	inode_t *inode;
 	int result = new_inode(path, mode, &inode);
-	if (result < 0) return result;
+	if (result < 0)
+		return result;
 	return 0;
 }
 
@@ -72,12 +74,15 @@ fisopfs_unlink(const char *path)
 static int
 fisopfs_rmdir(const char *path)
 {
-	inode_t* inode;
+	inode_t *inode;
 	int res = search_inode(path, &inode);
-	if (res < 0) return res;
+	if (res < 0)
+		return res;
 	int is_empty = dir_is_empty(inode);
-	if (is_empty < 0) return is_empty;
-	if (is_empty) return fiuba_unlink(path);
+	if (is_empty < 0)
+		return is_empty;
+	if (is_empty)
+		return fiuba_unlink(path);
 	return -EINVAL;
 }
 
@@ -91,9 +96,10 @@ fisopfs_rename(const char *from, const char *to)
 static int
 fisopfs_truncate(const char *path, off_t size)
 {
-	inode_t* inode;
+	inode_t *inode;
 	int res = search_inode(path, &inode);
-	if (res < 0) return res;
+	if (res < 0)
+		return res;
 	return truncate_inode(inode, size);
 }
 
@@ -112,9 +118,10 @@ fisopfs_read(const char *path,
              struct fuse_file_info *fi)
 {
 	// TODO: check permissions
-	inode_t* inode;
+	inode_t *inode;
 	int res = search_inode(path, &inode);
-	if (res < 0) return res;
+	if (res < 0)
+		return res;
 	return fiuba_read(inode, buffer, size, offset);
 }
 
@@ -126,11 +133,12 @@ fisopfs_write(const char *path,
               struct fuse_file_info *fi)
 {
 	// TODO: check permissions
-	inode_t* inode;
+	inode_t *inode;
 	int res = search_inode(path, &inode);
-	if (res < 0) return res;
+	if (res < 0)
+		return res;
 	if (S_ISDIR(inode->type_mode))
-        return -EINVAL; 
+		return -EINVAL;
 	return fiuba_write(inode, buf, size, offset);
 }
 
@@ -146,7 +154,7 @@ fisopfs_flush(const char *path, struct fuse_file_info *fi)
 {
 	// I don't think this have to be done here, but oh well.
 	int res = persist();
-	if (res){
+	if (res) {
 		printf("Can't persist the FS");
 	}
 	return res;
@@ -221,7 +229,7 @@ static void
 fisopfs_destroy(void *private_data)
 {
 	int res = persist();
-	if (res){
+	if (res) {
 		printf("Can't persist the FS");
 	}
 }
@@ -394,11 +402,13 @@ static struct fuse_operations operations = {
 };
 
 int
-load_persist(const char* file_name){
+load_persist(const char *file_name)
+{
 	int res = open(file_name, O_RDONLY);
-	if (res < 0) return -EIO;
+	if (res < 0)
+		return -EIO;
 	res = deserialize(res);
-	if (res < 0){
+	if (res < 0) {
 		close(res);
 		return -EIO;
 	};
@@ -411,9 +421,10 @@ persist()
 {
 	// TODO: save it in argv?
 	int res = open("~/.fisopfs/fisopfs", O_WRONLY | O_CREAT, 664);
-	if (res < 0) return -EIO;
+	if (res < 0)
+		return -EIO;
 	res = serialize(res);
-	if (res < 0){
+	if (res < 0) {
 		close(res);
 		return -EIO;
 	};
@@ -428,9 +439,10 @@ main(int argc, char *argv[])
 		printf("%s\n", argv[i]);
 	}
 	init_fs();
-	if(argc >= PERSIST_FILE_NAME){
+	if (argc >= PERSIST_FILE_NAME) {
 		if (load_persist < 0) {
-			perror("Error while trying to load the persisted information");
+			perror("Error while trying to load the persisted "
+			       "information");
 			return -EIO;
 		}
 	}

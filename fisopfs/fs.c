@@ -634,12 +634,24 @@ link_to_inode(ino_t parent_n, ino_t child_n, const char *child_name)
 	inode_t *parent = get_inode_n(parent_n);
 	// Already exists, fail
 	if(search_dir(parent, child_name) > 0) return -EINVAL;
-	dentry_t new_entry[1] = { { .file_name = { 0 }, .inode_number = child_n } };
-	strncpy(new_entry[0].file_name, child_name, MAX_FILE_NAME - 1);
 
-	int middle = iterate_over_dir(parent, (void *) new_entry, insert_dir);
+	dentry_t new_entry =  { 
+		.file_name = { 0 }, 
+		.inode_number = child_n 
+	};
+	strncpy(new_entry.file_name, child_name, MAX_FILE_NAME - 1);
+
+	int middle = iterate_over_dir(
+		parent, 
+		(void *) &new_entry, 
+		insert_dir);
+
 	if(middle < 0){
-		fiuba_write(parent, (char *) new_entry, MAX_FILE_NAME, parent->size);
+		fiuba_write(
+			parent, 
+			(char *) &new_entry, 
+			MAX_FILE_NAME, 
+			parent->size);
 	}
 	return 0;
 }
