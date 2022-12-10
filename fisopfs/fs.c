@@ -614,6 +614,18 @@ search_dir(const inode_t *inode, const char *dir_name)
 	return iterate_over_dir(inode, (void *) dir_name, is_dentry_searched);
 }
 
+bool
+insert_dir(dentry_t*curr, void* _new_entry)
+{
+	dentry_t* new_entry = (dentry_t *) _new_entry;
+	if(is_empty_dentry(curr)){
+		curr->inode_number = new_entry->inode_number;
+		strncpy(curr->file_name, new_entry->file_name, MAX_FILE_NAME);
+		return true;
+	}
+	return false;
+}
+
 int
 link_to_inode(ino_t parent_n, ino_t child_n, const char *child_name)
 {
@@ -624,8 +636,11 @@ link_to_inode(ino_t parent_n, ino_t child_n, const char *child_name)
 	if(search_dir(parent, child_name) > 0) return -EINVAL;
 	dentry_t new_entry[1] = { { .file_name = { 0 }, .inode_number = child_n } };
 	strncpy(new_entry[0].file_name, child_name, MAX_FILE_NAME - 1);
-	
-	fiuba_write(parent, (char *) new_entry, MAX_FILE_NAME, parent->size);
+
+	int middle = iterate_over_dir(parent, (void *) new_entry, insert_dir);
+	if(middle < 0){
+		fiuba_write(parent, (char *) new_entry, MAX_FILE_NAME, parent->size);
+	}
 	return 0;
 }
 
