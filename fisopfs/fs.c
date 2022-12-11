@@ -21,15 +21,12 @@
 // struct_stat.h asi directamente le podemos pasar la info de los inodos sin hacer calculos extras en el medio
 
 #define SUPERBLOCK ((superblock_t *) blocks)
-#define BLOCK(n) (void *) ((byte *) blocks + BLOCK_SIZE * n)
+#define BLOCK(n) (void *) ((byte *) blocks + BLOCK_SIZE * (n))
 #define DATA_BITMAP ((bool *) (SUPERBLOCK + 1))
 #define INODE_BITMAP                                                           \
 	((bool *) (DATA_BITMAP + ((SUPERBLOCK)->data_blocks_amount)))
 #define INODE_BLOCKS BLOCK(SUPERBLOCK->inode_start)
 #define DATA_BLOCKS BLOCK(SUPERBLOCK->data_start)
-
-#define DIR_TYPE_MODE                                                          \
-	(__S_IFDIR | S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH)
 
 
 #define EMPTY_DIRENTRY 0
@@ -48,13 +45,14 @@
 
 #define MAX_BLOCK_WRITE 20
 
+
 void init_inode(inode_t *inode, mode_t mode);
 
 inode_t *get_inode_n(int inode_nmb);
 
 void init_data_blocks_dir(inode_t *directory, const ino_t dot, const ino_t dotdot);
 
-void *get_inode_block_n(const inode_t *inode, int block_number);
+void *get_inode_block(const inode_t *inode, int block_number);
 
 int next_token(const char *path, int offset, char *buffer, int limit, int *rest);
 
@@ -62,7 +60,7 @@ int insert_direntry_if_free(dentry_t *curr, void *_new_entry);
 
 int search_parent_directory(const char *path, inode_t **out);
 
-ino_t search_dir(const inode_t *directory, const char *inode_name);
+ino_t search_dir_inode_n(const inode_t *directory, const char *inode_name);
 
 int search_free_inode(mode_t mode, inode_t **out);
 
@@ -109,7 +107,6 @@ init_bitmaps()
 	superblock_t *superblock = SUPERBLOCK;
 	bool *data_bitmap = DATA_BITMAP;
 	memset(data_bitmap, false, superblock->data_blocks_amount);
-
 	bool *inode_bitmap = INODE_BITMAP;
 	memset(inode_bitmap, false, superblock->inode_amount);
 	inode_bitmap[0] = true;
@@ -161,18 +158,16 @@ init_inode(inode_t *inode, mode_t mode)
 
 int
 add_inode_to_directory(inode_t *parent_inode,
+                       ino_t parent_inode_n,
                        inode_t *new_inode,
-                       char *new_inode_name,
-                       ino_t new_inode_number)
+                       ino_t new_inode_n,
+                       char *new_inode_name)
 {
-	dentry_t new_dentry = { .file_name = { 0 },
-		                .inode_number = new_inode_number };
-	printf("new name: %s\n", new_inode_name);
+	dentry_t new_dentry = { .inode_number = new_inode_n };
 	strcpy(new_dentry.file_name, new_inode_name);
 
 	int could_insert_in_the_middle = iterate_over_dir(
 	        parent_inode, insert_direntry_if_free, (void *) &new_dentry);
-
 	if (!could_insert_in_the_middle) {
 		int write_result = fiuba_write(parent_inode,
 		                               (char *) &new_dentry,
@@ -182,11 +177,15 @@ add_inode_to_directory(inode_t *parent_inode,
 			return write_result;
 		}
 	}
+
+	if (S_ISDIR(new_inode->type_mode))
+		init_data_blocks_dir(new_inode, new_inode_n, parent_inode_n);
+
 	return EXIT_SUCCESS;
 }
 
 int
-extract_new_inode_path_offset(const char *path)
+extract_last_name_offset(const char *path)
 {
 	int pathlen = strlen(path);
 	int i = pathlen - 1;
@@ -199,31 +198,43 @@ extract_new_inode_path_offset(const char *path)
 int
 new_inode(const char *path, mode_t mode, inode_t **out)
 {
+	inode_t *parent_inode;
+	ino_t parent_inode_n;
+
+	inode_t *new_inode;
+	ino_t new_inode_n;
+
+	int new_inode_path_offset;
+
+	int result;
+
 	size_t pathlen = strlen(path);
 	if (pathlen > MAX_PATH_LEN)
 		return -ENAMETOOLONG;
 
-	inode_t *parent_inode;
-	int result = search_parent_directory(path, &parent_inode);
+	result = search_parent_directory(path, &parent_inode);
 	if (result < 0)
 		return result;
+	parent_inode_n = result;
 
-	result = search_free_inode(mode, out);
+	result = search_free_inode(mode, &new_inode);
 	if (result < 0)
-		return -ENOMEM;
-	int new_inode_number = result;
-	int new_inode_path_offset = extract_new_inode_path_offset(path);
+		return result;
+	new_inode_n = result;
 
+
+	new_inode_path_offset = extract_last_name_offset(path);
 	result = add_inode_to_directory(parent_inode,
-	                                *out,
-	                                (char *) path + new_inode_path_offset,
-	                                new_inode_number);
+	                                parent_inode_n,
+	                                new_inode,
+	                                new_inode_n,
+	                                (char *) path + new_inode_path_offset);
 	if (result < 0) {
-		INODE_BITMAP[new_inode_number] = false;
-		*out = NULL;
+		INODE_BITMAP[new_inode_n] = false;
 		return result;
 	}
 
+	(*out) = new_inode;
 	return EXIT_SUCCESS;
 }
 
@@ -235,7 +246,7 @@ get_inode_n(int inode_nmb)
 }
 
 void *
-get_inode_indirect_block_n(const inode_t *inode, int block_n)
+get_inode_indirect_block(const inode_t *inode, int block_n)
 {
 	int *indirect_block =
 	        get_block_n(inode->blocks[INODE_INDIRECT_BLOCK_IDX]);
@@ -244,18 +255,39 @@ get_inode_indirect_block_n(const inode_t *inode, int block_n)
 }
 
 void *
-get_inode_block_n(const inode_t *inode, int block_n)
+get_inode_block(const inode_t *inode, int block_n)
 {
 	if (inode->block_amount <= block_n)
 		return NULL;
 
 	if (block_n >= INODE_INDIRECT_BLOCK_IDX) {
-		return get_inode_indirect_block_n(inode, block_n);
+		return get_inode_indirect_block(inode, block_n);
 	}
 
 	return get_block_n(inode->blocks[block_n]);
 }
 
+int
+get_inode_indirect_block_n(const inode_t *inode, int block_n)
+{
+	int *indirect_block =
+	        get_block_n(inode->blocks[INODE_INDIRECT_BLOCK_IDX]);
+	int new_index = block_n - INODE_INDIRECT_BLOCK_IDX;
+	return indirect_block[new_index];
+}
+
+int
+get_inode_block_n(const inode_t *inode, int block_n)
+{
+	if (inode->block_amount <= block_n)
+		return -EINVAL;
+
+	if (block_n >= INODE_INDIRECT_BLOCK_IDX) {
+		return get_inode_indirect_block_n(inode, block_n);
+	}
+
+	return inode->blocks[block_n];
+}
 
 void
 notify_access(inode_t *inode, time_t *t)
@@ -281,7 +313,6 @@ notify_modif(inode_t *inode, time_t *t)
 	inode->last_modification = new_time;
 }
 
-
 int
 search_free_inode(mode_t mode, inode_t **out)
 {
@@ -290,54 +321,39 @@ search_free_inode(mode_t mode, inode_t **out)
 	for (int i = ROOT_INODE + 1; i < superblock->inode_amount; i++) {
 		if (!inode_bitmap[i]) {
 			inode_bitmap[i] = true;
-			*out = get_inode_n(i);
-			init_inode(*out, mode);
+			(*out) = get_inode_n(i);
+			init_inode((*out), mode);
 			return i;
 		}
 	}
 	return -ENOMEM;
 }
 
-
 void
-deallocate_blocks_from_inode(inode_t *inode, int block_dest)
+deallocate_blocks_from_inode(inode_t *inode, int new_block_amount)
 {
-	int to_delete = inode->block_amount - block_dest;
-	bool have_indirect = inode->block_amount >= MAX_INODE_BLOCK_PTR;
-	if (have_indirect) {
-		int *indirect = (int *) get_block_n(
-		        inode->blocks[INODE_INDIRECT_BLOCK_IDX]);
-		int indirect_amount = inode->block_amount - MAX_DIRECT_BLOCK_COUNT;
-		for (int i = indirect_amount; i < 0 || to_delete < 0; i--) {
-			deallocate_block(indirect[i]);
-			to_delete--;
-		}
+	int block_n;
+
+	for (int i = inode->block_amount; i > new_block_amount;
+	     inode->block_amount--) {
+		block_n = get_inode_block_n(inode, inode->block_amount - 1);
+		deallocate_block(block_n);
 	}
-	if (block_dest <= MAX_DIRECT_BLOCK_COUNT) {
-		deallocate_block(inode->blocks[INODE_INDIRECT_BLOCK_IDX]);
-		for (int i = MAX_DIRECT_BLOCK_COUNT; i < 0 || to_delete < 0; i--) {
-			deallocate_block(inode->blocks[i - 1]);
-			to_delete--;
-		}
-	}
-	inode->block_amount = block_dest;
 }
 
 void
-deallocate_inode(ino_t inode_n, inode_t *inode)
+deallocate_inode(inode_t *inode, ino_t inode_n)
 {
 	deallocate_blocks_from_inode(inode, 0);
-	bool *inode_bitmap = INODE_BITMAP;
-	inode_bitmap[inode_n] = false;
+	INODE_BITMAP[inode_n] = false;
 }
 
 void
-substract_link(ino_t inode_n)
+substract_link(inode_t *inode_to_rmv, ino_t inode_to_rmv_n)
 {
-	inode_t *inode = get_inode_n(inode_n);
-	inode->link_count--;
-	if (inode->link_count)
-		deallocate_inode(inode_n, inode);
+	inode_to_rmv->link_count--;
+	if (inode_to_rmv->link_count == 0)
+		deallocate_inode(inode_to_rmv, inode_to_rmv_n);
 }
 
 int
@@ -353,38 +369,54 @@ truncate_inode(inode_t *inode, off_t size)
 	return 0;
 }
 
-// int
-// remove_from_parent(const char *path)
-// {
-// 	int name_offset;
-// 	ino_t parent;
-// 	ino_t result = search_parent(path, &parent, &name_offset);
-// 	if (result < 0)
-// 		return result;
-// 	ino_t to_delete = unlink_inode(get_inode_n(parent), path + name_offset);
-// 	return to_delete;
-// }
+int
+remove_from_parent(const char *path)
+{
+	inode_t *parent_inode;
+
+	int name_offset;
+
+	int result;
+
+	result = search_parent_directory(path, &parent_inode);
+	if (result == 0)
+		return -ENOENT;
+	if (result < 0)
+		return result;
+
+	name_offset = extract_last_name_offset(path);
+
+	result = unlink_inode(parent_inode, path + name_offset);
+	if (result == 0)
+		return -ENOENT;
+
+	return result;
+}
 
 // int
 // insert_into_parent(const char *path, ino_t inode_n)
 // {
 // 	int name_offset;
 // 	ino_t parent;
-// 	int result = search_parent(path, &parent, &name_offset);
+
+// 	inode_t *parent_inode;
+// 	int result = search_parent_directory(path, &parent_inode);
 // 	if (result < 0)
 // 		return result;
+
 // 	return link_to_inode(parent, inode_n, path + name_offset);
 // }
 
-// int
-// fiuba_unlink(const char *path)
-// {
-// 	ino_t to_delete = remove_from_parent(path);
-// 	if (to_delete < 0)
-// 		return to_delete;
-// 	substract_link(to_delete);
-// 	return 0;
-// }
+int
+fiuba_unlink(const char *path, inode_t *inode_to_rmv, ino_t inode_to_rmv_n)
+{
+	int result = remove_from_parent(path);
+	if (result <= 0)
+		return result;
+
+	substract_link(inode_to_rmv, inode_to_rmv_n);
+	return EXIT_SUCCESS;
+}
 
 // int
 // move_inode(const char *from, const char *to)
@@ -398,7 +430,7 @@ truncate_inode(inode_t *inode, off_t size)
 // 	int result = insert_into_parent(to, to_delete);
 // 	if (result < 0) {
 // 		// Guaranteed not to fail, because it was recently removed from
-// it. 		insert_into_parent(from, to_delete);
+// 		it.insert_into_parent(from, to_delete);
 // 	}
 // 	return result;
 // }
@@ -408,10 +440,13 @@ truncate_inode(inode_t *inode, off_t size)
 // exchange_inodes(const char *path_one, const char *path_two)
 // {
 // 	// All the insert operations here are guaranteed not to fail due to name
-// collission. 	ino_t inode_one = remove_from_parent(path_one); 	if
-// (inode_one < 0) 		return inode_one; 	ino_t inode_two =
-// remove_from_parent(path_two); 	if (inode_two < 0) {
-// insert_into_parent(path_one, inode_one); 		return inode_two;
+// 	collission.ino_t inode_one = remove_from_parent(path_one);
+// 	if (inode_one < 0)
+// 		return inode_one;
+// 	ino_t inode_two = remove_from_parent(path_two);
+// 	if (inode_two < 0) {
+// 		insert_into_parent(path_one, inode_one);
+// 		return inode_two;
 // 	}
 // 	insert_into_parent(path_one, inode_two);
 // 	insert_into_parent(path_two, inode_one);
@@ -445,7 +480,6 @@ deserialize_inode(int fd, ino_t inode_n)
 	return 0;
 }
 
-
 int
 serialize_inode(int fd, ino_t inode_n)
 {
@@ -458,7 +492,7 @@ serialize_inode(int fd, ino_t inode_n)
 	size_t data_written = 0;
 	int curr_block = 0;
 	while (data_written < inode->size) {
-		char *data = (char *) get_inode_block_n(inode, curr_block);
+		char *data = (char *) get_inode_block(inode, curr_block);
 		size_t this_write_size = inode->size - data_written >= BLOCK_SIZE
 		                                 ? BLOCK_SIZE
 		                                 : inode->size - data_written;
@@ -480,7 +514,7 @@ serialize_inode(int fd, ino_t inode_n)
 void *
 get_block_n(int block_n)
 {
-	return BLOCK(SUPERBLOCK->data_start + block_n);
+	return BLOCK((SUPERBLOCK->data_start + block_n));
 }
 
 int
@@ -489,18 +523,9 @@ search_free_block()
 	bool *block_bitmap = DATA_BITMAP;
 	superblock_t *superblock = SUPERBLOCK;
 
-	for (int i = last_used_block; i < superblock->block_size; i++) {
+	for (int i = 0; i < superblock->data_blocks_amount; i++) {
 		if (!block_bitmap[i]) {
 			block_bitmap[i] = true;
-			last_used_block = i;
-			return i;
-		}
-	}
-
-	for (int i = 0; i < last_used_block; i++) {
-		if (!block_bitmap[i]) {
-			block_bitmap[i] = true;
-			last_used_block = i;
 			return i;
 		}
 	}
@@ -510,7 +535,7 @@ search_free_block()
 void *
 allocate_direct_block(inode_t *inode, int new_free_block)
 {
-	inode->blocks[inode->block_amount - 1] = new_free_block;
+	inode->blocks[inode->block_amount] = new_free_block;
 	inode->block_amount++;
 
 	return get_block_n(new_free_block);
@@ -597,8 +622,7 @@ init_data_blocks_dir(inode_t *dir_inode, const ino_t dot, const ino_t dotdot)
 {
 	dentry_t dentries[] = { { .inode_number = dot, .file_name = "." },
 		                { .inode_number = dotdot, .file_name = ".." } };
-
-	fiuba_write(dir_inode, (char *) &dentries, sizeof(dentries), 0);
+	fiuba_write(dir_inode, (char *) &dentries, sizeof(dentries), dir_inode->size);
 }
 
 int
@@ -621,7 +645,6 @@ fiuba_access(inode_t *inode, int mask)
 
 	return EXIT_SUCCESS;
 }
-
 
 bool
 is_free_dentry(dentry_t *dentry)
@@ -723,7 +746,7 @@ iterate_over_dir(const inode_t *inode, dentry_iterator func, void *param)
 	int curr_inode_block = 0;  // block idx
 	int curr_iter_size = 0;
 
-	dentry_t *curr_dentry = get_inode_block_n(inode, curr_inode_block);
+	dentry_t *curr_dentry = get_inode_block(inode, curr_inode_block);
 	while (curr_dentry && curr_iter_size < inode->size) {
 		// cero -> sigo iterando
 		// > cero -> freno iteracion forzado
@@ -734,13 +757,13 @@ iterate_over_dir(const inode_t *inode, dentry_iterator func, void *param)
 			return response;
 
 		curr_inode_block++;
-		curr_dentry = get_inode_block_n(inode, curr_inode_block);
+		curr_dentry = get_inode_block(inode, curr_inode_block);
 	}
 	return 0;
 }
 
 ino_t
-search_dir(const inode_t *inode, const char *dir_name)
+search_dir_inode_n(const inode_t *inode, const char *dir_name)
 {
 	return iterate_over_dir(inode, is_dentry_searched, (void *) dir_name);
 }
@@ -749,10 +772,7 @@ int
 insert_direntry_if_free(dentry_t *curr, void *_new_entry)
 {
 	dentry_t *new_entry = (dentry_t *) _new_entry;
-	printf("curr name (iter): %s\n", curr->file_name);
 	if (is_free_dentry(curr)) {
-		printf("entro al if\n");
-
 		curr->inode_number = new_entry->inode_number;
 		strcpy(curr->file_name, new_entry->file_name);
 		return new_entry->inode_number;  // Si encontro dentry libre inserta el nuevo
@@ -851,13 +871,13 @@ get_first_file_name(const char *path, char *buffer)
 		buffer[i] = path[i];
 		i++;
 	}
-	buffer[i + 1] = '\0';
+	buffer[i] = '\0';
 
 	return i;
 }
 
 int
-search_inode_rec(const char *path, inode_t **out, inode_t *curr_inode)
+search_inode_rec(const char *path, inode_t **out, inode_t *curr_inode, ino_t curr_inode_n)
 {
 	char buffer[MAX_FILE_NAME];
 	int buff_len;
@@ -869,25 +889,25 @@ search_inode_rec(const char *path, inode_t **out, inode_t *curr_inode)
 
 	if ((*path) == '\0') {
 		(*out) = curr_inode;
-		return EXIT_SUCCESS;
+		return curr_inode_n;
 	}
 
 	buff_len = get_first_file_name(path, buffer);
 
-	response = search_dir(curr_inode, buffer);
+	response = search_dir_inode_n(curr_inode, buffer);
 	if (response < 0)
 		return response;
 	else if (response == 0)
 		return -ENOENT;
+	curr_inode_n = response;
 
-	curr_inode = get_inode_n(response);
+	curr_inode = get_inode_n(curr_inode_n);
 	if (path[buff_len] == '\0') {
 		(*out) = curr_inode;
-		return EXIT_SUCCESS;
+		return curr_inode_n;
 	}
 
-
-	return search_inode_rec(path + buff_len + 1, out, curr_inode);
+	return search_inode_rec(path + buff_len + 1, out, curr_inode, curr_inode_n);
 }
 
 int
@@ -898,7 +918,7 @@ search_inode(const char *path, inode_t **out)
 	if (strlen(path) >= MAX_FILE_NAME)
 		return -ENAMETOOLONG;
 
-	char path_copy[MAX_PATH_LEN] = { '\0' };
+	char path_copy[MAX_PATH_LEN] = { 0 };
 	strcpy(path_copy, path);
 
 	inode_t *root_inode = get_inode_n(ROOT_INODE);
@@ -907,7 +927,7 @@ search_inode(const char *path, inode_t **out)
 	if (path_len > 1 && path_copy[path_len - 1] == '/')
 		path_copy[path_len - 1] = '\0';
 
-	return search_inode_rec(path_copy + 1, out, root_inode);
+	return search_inode_rec(path_copy + 1, out, root_inode, ROOT_INODE);
 }
 
 int
@@ -985,24 +1005,23 @@ fiuba_read(const inode_t *inode, char *buffer, size_t size, off_t offset)
 
 	int read = 0;
 
-	char *data = get_inode_block_n(inode, inode_block_idx);
+	char *data = get_inode_block(inode, inode_block_idx);
 	while (data &&                         // I have something to read
-	       inode->size > offset + read &&  // What I'm reading is user data
+	       offset + read < inode->size &&  // What I'm reading is user data
 	       read < size  // I'm not exceeding the buffer size
 	) {
 		buffer[read] = data[curr_block_offset];
 
 		curr_block_offset++;
+		read++;
 
 		if (curr_block_offset > BLOCK_SIZE) {
 			inode_block_idx++;
-			data = get_inode_block_n(inode, inode_block_idx);
+			data = get_inode_block(inode, inode_block_idx);
 			curr_block_offset = 0;
 		}
 	}
 
-	if (!data)
-		return -EINVAL;
 	return read;
 }
 
@@ -1039,7 +1058,7 @@ fiuba_write(inode_t *inode, const char *buffer, size_t size, off_t offset)
 
 	int written = 0;
 
-	byte *data_block = get_inode_block_n(inode, inode_block_idx);
+	byte *data_block = get_inode_block(inode, inode_block_idx);
 	if (!data_block) {
 		// If offset is exactly divisible by BLOCK_SIZE, the
 		// block will be NULL because it points to a new block

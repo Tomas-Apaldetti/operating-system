@@ -28,7 +28,7 @@ fisopfs_getattr(const char *path, struct stat *st)
 
 	inode_t *inode;
 	int response = search_inode(path, &inode);
-	if (response != 0)
+	if (response < 0)
 		return response;
 
 	st->st_mode = inode->type_mode;
@@ -49,12 +49,12 @@ static int
 fisopfs_mknod(const char *path, mode_t mode, dev_t rdev)
 {
 	printf("[debug] fisopfs_mknod with: %s \n", path);
-	// TODO: dependiendo del modo que me manden tengo que ver si crear un directorio o un file
+
 	inode_t *inode;
 	int result;
 
 	result = search_inode(path, &inode);
-	if (result == EXIT_SUCCESS)
+	if (result > 0)
 		return -EEXIST;
 
 	result = new_inode(path, mode, &inode);
@@ -67,12 +67,7 @@ static int
 fisopfs_mkdir(const char *path, mode_t mode)
 {
 	printf("[debug] fisopfs_mkdir \n");
-
-	inode_t *inode;
-	int result = new_inode(path, mode, &inode);
-	if (result < 0)
-		return result;
-	return EXIT_SUCCESS;
+	return fisopfs_mknod(path, DIR_TYPE_MODE | mode, 0);
 }
 
 static int
@@ -80,8 +75,20 @@ fisopfs_unlink(const char *path)
 {
 	printf("[debug] fisopfs_unlink \n");
 
-	// return fiuba_unlink(path);
-	return 0;
+	inode_t *inode_to_rmv;
+	ino_t inode_to_rmv_n;
+
+	int result = search_inode(path, &inode_to_rmv);
+	if (result == 0)
+		return -ENOENT;
+	else if (result < 0)
+		return result;
+	inode_to_rmv_n = result;
+
+	if (S_ISDIR(inode_to_rmv->type_mode))
+		return -EISDIR;
+
+	return fiuba_unlink(path, inode_to_rmv, inode_to_rmv_n);
 }
 
 static int
@@ -89,17 +96,17 @@ fisopfs_rmdir(const char *path)
 {
 	printf("[debug] fisopfs_rmdir \n");
 
-	inode_t *inode;
-	int res = search_inode(path, &inode);
-	if (res < 0)
-		return res;
-	int is_empty = dir_is_empty(inode);
-	if (is_empty < 0)
-		return is_empty;
-	if (is_empty)
-		// return fiuba_unlink(path);
-		return 0;
-	return -EINVAL;
+	// inode_t *inode;
+	// int res = search_inode(path, &inode);
+	// if (res < 0)
+	// 	return res;
+	// int is_empty = dir_is_empty(inode);
+	// if (is_empty < 0)
+	// 	return is_empty;
+	// if (is_empty)
+	// 	return fiuba_unlink(path, inode);
+	// return -EINVAL;
+	return 0;
 }
 
 static int
@@ -165,21 +172,16 @@ fisopfs_write(const char *path,
 }
 
 static int
-fisopfs_statfs(const char *path, struct statvfs *stbuf)
-{
-	printf("[debug] fisopfs_statfs \n");
-	return -ENOENT;
-}
-
-static int
 fisopfs_flush(const char *path, struct fuse_file_info *fi)
 {
 	// I don't think this have to be done here, but oh well.
+	printf("[debug] fisopfs_flush \n");
+
 	int res = persist();
 	if (res) {
 		printf("Can't persist the FS");
 	}
-	return res;
+	return 0;
 }
 
 static int
@@ -203,7 +205,7 @@ fisopfs_opendir(const char *path, struct fuse_file_info *fi)
 	printf("[debug] fisopfs_opendir flags: %i \n", fi->flags);
 
 	inode_t *inode;
-	return search_inode(path, &inode);  // ver de devolver el numero de inodo
+	return 0;  // ver de devolver el numero de inodo
 }
 
 static int
@@ -218,7 +220,7 @@ fisopfs_readdir(const char *path,
 	inode_t *inode;
 
 	int response = search_inode(path, &inode);
-	if (response != 0)
+	if (response < 0)
 		return response;
 
 	return fiuba_readdir(inode, buffer, filler);
@@ -297,13 +299,6 @@ fisopfs_fgetattr(const char *path, struct stat *stbuf, struct fuse_file_info *fi
 }
 
 static int
-fisopfs_lock(const char *path, struct fuse_file_info *fi, int cmd, struct flock *locks)
-{
-	printf("[debug] fisopfs_lock \n");
-	return 0;
-}
-
-static int
 fisopfs_utimens(const char *path, const struct timespec tv[2])
 {
 	printf("[debug] fisopfs_utimens \n");
@@ -338,13 +333,6 @@ fisopfs_poll(const char *path,
              unsigned *reventsp)
 {
 	printf("[debug] fisopfs_poll \n");
-	return -ENOENT;
-}
-
-static int
-fisopfs_flock(const char *path, struct fuse_file_info *fi, int op)
-{
-	printf("[debug] fisopfs_flock \n");
 	return -ENOENT;
 }
 
@@ -396,14 +384,8 @@ static struct fuse_operations operations = {
 	.readdir = fisopfs_readdir,
 	.releasedir = fisopfs_releasedir,
 
-	.statfs = fisopfs_statfs,
 	.flush = fisopfs_flush,
 	.fsync = fisopfs_fsync,
-
-	.lock = fisopfs_lock,  // Prolly not
-
-	// .write_buf = fisopfs_write_buf,  // What is the difference
-	// .read_buf = fisopfs_read_buf,
 
 	.fallocate = fisopfs_fallocate,  // Probably not, but not too difficult
 

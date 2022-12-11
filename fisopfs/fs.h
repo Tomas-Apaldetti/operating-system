@@ -33,6 +33,9 @@
 
 #define DENTRY_EMPTY 0
 
+#define DIR_TYPE_MODE                                                          \
+	(__S_IFDIR | S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH)
+
 #define P_OX 0x1
 #define P_OW 0x2
 #define P_OR 0x4
@@ -94,7 +97,7 @@ int search_inode(const char *path, inode_t **out);
 
 int new_inode(const char *path, mode_t mode, inode_t **out);
 
-// int fiuba_unlink(const char *path);
+int fiuba_unlink(const char *path, inode_t *inode_to_rmv, ino_t inode_to_rmv_n);
 
 int dir_is_empty(inode_t *inode);
 
@@ -103,8 +106,6 @@ int iterate_over_dir(const inode_t *inode, dentry_iterator func, void *param);
 int truncate_inode(inode_t *inode, off_t size);
 
 int fiuba_write(inode_t *inode, const char *buf, size_t size, off_t offset);
-
-int fiuba_write_buf(inode_t *inode, struct fuse_bufvec *bufvec_src, off_t offset);
 
 int fiuba_read(const inode_t *inode, char *buffer, size_t size, off_t offset);
 
