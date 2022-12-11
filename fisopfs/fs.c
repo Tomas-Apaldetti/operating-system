@@ -76,6 +76,8 @@ ino_t unlink_inode(const inode_t *inode, const char *dir_name);
 
 int chcount(char c, const char *s);
 
+bool is_free_dentry(dentry_t *dentry);
+
 
 byte blocks[FS_SIZE] = { 0 };  // ~200 MiB
 
@@ -334,8 +336,7 @@ deallocate_blocks_from_inode(inode_t *inode, int new_block_amount)
 {
 	int block_n;
 
-	for (int i = inode->block_amount; i > new_block_amount;
-	     inode->block_amount--) {
+	for (; inode->block_amount > new_block_amount; inode->block_amount--) {
 		block_n = get_inode_block_n(inode, inode->block_amount - 1);
 		deallocate_block(block_n);
 	}
@@ -408,7 +409,7 @@ remove_from_parent(const char *path)
 // }
 
 int
-fiuba_unlink(const char *path, inode_t *inode_to_rmv, ino_t inode_to_rmv_n)
+fiuba_rmv_inode(const char *path, inode_t *inode_to_rmv, ino_t inode_to_rmv_n)
 {
 	int result = remove_from_parent(path);
 	if (result <= 0)
@@ -417,6 +418,7 @@ fiuba_unlink(const char *path, inode_t *inode_to_rmv, ino_t inode_to_rmv_n)
 	substract_link(inode_to_rmv, inode_to_rmv_n);
 	return EXIT_SUCCESS;
 }
+
 
 // int
 // move_inode(const char *from, const char *to)
@@ -601,7 +603,9 @@ fill_buff_readdir(dentry_t *dentry, void *param)
 	void *buffer = special_param[0];
 	fuse_fill_dir_t filler = special_param[1];
 
-	filler(buffer, dentry->file_name, NULL, 0);
+	if (!is_free_dentry(dentry))
+		filler(buffer, dentry->file_name, NULL, 0);
+
 	return 0;
 }
 
@@ -653,12 +657,6 @@ is_free_dentry(dentry_t *dentry)
 }
 
 int
-is_not_empty_dentry(dentry_t *dentry, void *_)
-{
-	return !is_free_dentry(dentry);
-}
-
-int
 is_dentry_searched(dentry_t *dentry, void *_dir_name)
 {
 	char *dir_name = (char *) _dir_name;
@@ -671,18 +669,30 @@ is_dentry_searched(dentry_t *dentry, void *_dir_name)
 }
 
 int
+search_first_file(dentry_t *dentry, void *_)
+{
+	printf("DENTRY NAME %s\n", dentry->file_name);
+	if (is_free_dentry(dentry) || (strcmp(dentry->file_name, ".") == 0) ||
+	    (strcmp(dentry->file_name, "..") == 0)) {
+		return 0;
+	}
+
+	return dentry->inode_number;
+}
+
+
+bool
 dir_is_empty(inode_t *inode)
 {
-	if (!(S_ISDIR(inode->type_mode)))
-		return -ENOTDIR;
-
 	if (inode->size == 2 * sizeof(dentry_t))
-		return 1;
+		return true;
 
-	int result = iterate_over_dir(inode, is_not_empty_dentry, NULL);
-	if (result < 0)
-		return 0;
-	return 1;
+	int result = iterate_over_dir(inode, search_first_file, NULL);
+	printf("RESULT %i\n", result);
+	printf("Inode size %li\n", inode->size);
+	if (result == 0)
+		return true;
+	return false;
 }
 
 int

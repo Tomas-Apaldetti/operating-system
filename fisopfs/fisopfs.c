@@ -88,7 +88,7 @@ fisopfs_unlink(const char *path)
 	if (S_ISDIR(inode_to_rmv->type_mode))
 		return -EISDIR;
 
-	return fiuba_unlink(path, inode_to_rmv, inode_to_rmv_n);
+	return fiuba_rmv_inode(path, inode_to_rmv, inode_to_rmv_n);
 }
 
 static int
@@ -96,17 +96,22 @@ fisopfs_rmdir(const char *path)
 {
 	printf("[debug] fisopfs_rmdir \n");
 
-	// inode_t *inode;
-	// int res = search_inode(path, &inode);
-	// if (res < 0)
-	// 	return res;
-	// int is_empty = dir_is_empty(inode);
-	// if (is_empty < 0)
-	// 	return is_empty;
-	// if (is_empty)
-	// 	return fiuba_unlink(path, inode);
-	// return -EINVAL;
-	return 0;
+	inode_t *inode_to_rmv;
+	ino_t inode_to_rmv_n;
+
+	int result = search_inode(path, &inode_to_rmv);
+	if (result == 0)
+		return -ENOENT;
+	else if (result < 0)
+		return result;
+	inode_to_rmv_n = result;
+
+	if (!S_ISDIR(inode_to_rmv->type_mode))
+		return -ENOTDIR;
+	if (!dir_is_empty(inode_to_rmv))
+		return -ENOTEMPTY;
+
+	return fiuba_rmv_inode(path, inode_to_rmv, inode_to_rmv_n);
 }
 
 static int
@@ -246,7 +251,6 @@ static void *
 fisopfs_init(struct fuse_conn_info *conn)
 {
 	printf("[debug] fisopfs_init \n");
-
 	return (void *) 0;
 }
 
@@ -437,5 +441,6 @@ main(int argc, char *argv[])
 			return -EIO;
 		}
 	}
+
 	return fuse_main(argc, argv, &operations, NULL);
 }

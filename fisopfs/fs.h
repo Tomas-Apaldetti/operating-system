@@ -97,9 +97,9 @@ int search_inode(const char *path, inode_t **out);
 
 int new_inode(const char *path, mode_t mode, inode_t **out);
 
-int fiuba_unlink(const char *path, inode_t *inode_to_rmv, ino_t inode_to_rmv_n);
+int fiuba_rmv_inode(const char *path, inode_t *inode_to_rmv, ino_t inode_to_rmv_n);
 
-int dir_is_empty(inode_t *inode);
+bool dir_is_empty(inode_t *inode);
 
 int iterate_over_dir(const inode_t *inode, dentry_iterator func, void *param);
 
