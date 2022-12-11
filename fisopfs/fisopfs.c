@@ -49,7 +49,7 @@ static int
 fisopfs_mknod(const char *path, mode_t mode, dev_t rdev)
 {
 	printf("[debug] fisopfs_mknod with: %s \n", path);
-
+	// TODO: dependiendo del modo que me manden tengo que ver si crear un directorio o un file
 	inode_t *inode;
 	int result;
 
@@ -58,8 +58,6 @@ fisopfs_mknod(const char *path, mode_t mode, dev_t rdev)
 		return -EEXIST;
 
 	result = new_inode(path, mode, &inode);
-	printf("creo el inodo bien: %i\n", result);
-
 	if (result < 0)
 		return result;
 	return EXIT_SUCCESS;
@@ -295,7 +293,6 @@ fisopfs_fgetattr(const char *path, struct stat *stbuf, struct fuse_file_info *fi
 {
 	printf("[debug] fisopfs_fgetattr \n");
 
-
 	return -ENOENT;
 }
 
@@ -341,27 +338,6 @@ fisopfs_poll(const char *path,
              unsigned *reventsp)
 {
 	printf("[debug] fisopfs_poll \n");
-	return -ENOENT;
-}
-
-static int
-fisopfs_write_buf(const char *path,
-                  struct fuse_bufvec *buf,
-                  off_t off,
-                  struct fuse_file_info *fi)
-{
-	printf("[debug] fisopfs_write_buf \n");
-	return -ENOENT;
-}
-
-static int
-fisopfs_read_buf(const char *path,
-                 struct fuse_bufvec **bufp,
-                 size_t size,
-                 off_t off,
-                 struct fuse_file_info *fi)
-{
-	printf("[debug] fisopfs_read_buf \n");
 	return -ENOENT;
 }
 
@@ -426,8 +402,8 @@ static struct fuse_operations operations = {
 
 	.lock = fisopfs_lock,  // Prolly not
 
-	.write_buf = fisopfs_write_buf,  // What is the difference
-	.read_buf = fisopfs_read_buf,
+	// .write_buf = fisopfs_write_buf,  // What is the difference
+	// .read_buf = fisopfs_read_buf,
 
 	.fallocate = fisopfs_fallocate,  // Probably not, but not too difficult
 

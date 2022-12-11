@@ -104,6 +104,8 @@ int truncate_inode(inode_t *inode, off_t size);
 
 int fiuba_write(inode_t *inode, const char *buf, size_t size, off_t offset);
 
+int fiuba_write_buf(inode_t *inode, struct fuse_bufvec *bufvec_src, off_t offset);
+
 int fiuba_read(const inode_t *inode, char *buffer, size_t size, off_t offset);
 
 int fiuba_readdir(inode_t *inode, void *buffer, fuse_fill_dir_t filler);

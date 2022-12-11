@@ -46,6 +46,7 @@
 #define FS_SIZE                                                                \
 	(1 * BLOCK_SIZE + INODE_BLOCK_N * BLOCK_SIZE + BLOCK_AMOUNT * BLOCK_SIZE)
 
+#define MAX_BLOCK_WRITE 20
 
 void init_inode(inode_t *inode, mode_t mode);
 
@@ -154,7 +155,7 @@ init_inode(inode_t *inode, mode_t mode)
 	inode->created_date = curr_time;
 
 	inode->size = 0;
-	inode->link_count = 0;
+	inode->link_count = 1;
 	inode->block_amount = 0;
 }
 
@@ -177,8 +178,6 @@ add_inode_to_directory(inode_t *parent_inode,
 		                               (char *) &new_dentry,
 		                               sizeof(dentry_t),
 		                               parent_inode->size);
-		printf("write result: %i\n", write_result);
-		printf("parent inode size: %li\n", parent_inode->size);
 		if (write_result < 0) {
 			return write_result;
 		}
@@ -206,8 +205,6 @@ new_inode(const char *path, mode_t mode, inode_t **out)
 
 	inode_t *parent_inode;
 	int result = search_parent_directory(path, &parent_inode);
-	printf("parent inode size: %ld\n", parent_inode->size);
-
 	if (result < 0)
 		return result;
 
@@ -215,26 +212,18 @@ new_inode(const char *path, mode_t mode, inode_t **out)
 	if (result < 0)
 		return -ENOMEM;
 	int new_inode_number = result;
-
 	int new_inode_path_offset = extract_new_inode_path_offset(path);
 
-	int adding_result =
-	        add_inode_to_directory(parent_inode,
-	                               *out,
-	                               (char *) path + new_inode_path_offset,
-	                               new_inode_number);
-
-
-	printf("result de add inode to dirents: %i\n", adding_result);
-
-
-	if (adding_result < 0) {
+	result = add_inode_to_directory(parent_inode,
+	                                *out,
+	                                (char *) path + new_inode_path_offset,
+	                                new_inode_number);
+	if (result < 0) {
 		INODE_BITMAP[new_inode_number] = false;
 		*out = NULL;
-		return adding_result;
+		return result;
 	}
 
-	//*out->link_count = 1;
 	return EXIT_SUCCESS;
 }
 
@@ -830,28 +819,27 @@ chcount(char c, const char *s)
 /// @return -1 in case the token is larger than limit (In other words, if any
 /// other char other than '/' or '\0' is in the new offset). An integer greater
 /// than 0, showing the offset position into the path of the next separator
-int
-next_token(const char *path, int offset, char *buffer, int limit, int *rest)
-{
-	int path_index = offset + 1;  // Skip '/' that will be at the start
-	int buffer_idx = 0;
+// int
+// next_token(const char *path, int offset, char *buffer, int limit, int *rest)
+// {
+// 	int path_index = offset + 1;  // Skip '/' that will be at the start
+// 	int buffer_idx = 0;
 
-	while (path[path_index] != '/' && path[path_index] != '\0' &&
-	       buffer_idx < limit) {
-		buffer[buffer_idx] = path[path_index];
-		buffer_idx++;
-		path_index++;
-	}
-	buffer[buffer_idx + 1] = '\0';
+// 	while (path[path_index] != '/' && path[path_index] != '\0' &&
+// 	       buffer_idx < limit) {
+// 		buffer[buffer_idx] = path[path_index];
+// 		buffer_idx++;
+// 		path_index++;
+// 	}
+// 	buffer[buffer_idx + 1] = '\0';
 
-	bool token_finished = path[path_index] == '/' || path[path_index] == '\0';
-	if (buffer_idx == limit && !token_finished)
-		return -EINVAL;
+// 	bool token_finished = path[path_index] == '/' || path[path_index] ==
+// '\0'; 	if (buffer_idx == limit && !token_finished) 		return -EINVAL;
 
-	if (rest)
-		*rest = chcount('/', path + path_index + 1);
-	return path_index;
-}
+// 	if (rest)
+// 		*rest = chcount('/', path + path_index + 1);
+// 	return path_index;
+// }
 
 
 int
@@ -989,15 +977,15 @@ search_parent_directory(const char *path, inode_t **out)
 int
 fiuba_read(const inode_t *inode, char *buffer, size_t size, off_t offset)
 {
+	if (inode->size < offset)
+		return -EINVAL;
+
 	int inode_block_idx = offset / BLOCK_SIZE;
 	int curr_block_offset = offset % BLOCK_SIZE;
 
 	int read = 0;
 
 	char *data = get_inode_block_n(inode, inode_block_idx);
-	if (!data)
-		return -EINVAL;
-
 	while (data &&                         // I have something to read
 	       inode->size > offset + read &&  // What I'm reading is user data
 	       read < size  // I'm not exceeding the buffer size
@@ -1013,6 +1001,8 @@ fiuba_read(const inode_t *inode, char *buffer, size_t size, off_t offset)
 		}
 	}
 
+	if (!data)
+		return -EINVAL;
 	return read;
 }
 
@@ -1020,29 +1010,37 @@ fiuba_read(const inode_t *inode, char *buffer, size_t size, off_t offset)
  *  ========================= WRITE =============================
  *  =============================================================
  */
+
+int
+calc_last_block_idx(int inode_block_idx, int block_offset, size_t size)
+{
+	int inode_last_block_idx = inode_block_idx + (size / BLOCK_SIZE);
+
+	if ((size % BLOCK_SIZE) + block_offset >= BLOCK_SIZE)
+		inode_last_block_idx += 1;
+
+	return inode_last_block_idx;
+}
+
 int
 fiuba_write(inode_t *inode, const char *buffer, size_t size, off_t offset)
 {
 	if (inode->size < offset)
 		return -EINVAL;
 
-
 	// Search where to start writing
-	long inode_block_idx = offset / BLOCK_SIZE;
-	long curr_block_offset = offset % BLOCK_SIZE;
+	int inode_block_idx = offset / BLOCK_SIZE;
+	int curr_block_offset = offset % BLOCK_SIZE;
 
-	// long inode_block_idx = 0;
-	// long curr_block_offset = offset;
+	int inode_last_block_idx =
+	        calc_last_block_idx(inode_block_idx, curr_block_offset, size);
+	if (inode_last_block_idx >= MAX_BLOCK_COUNT)
+		return -ENOMEM;
 
 	int written = 0;
-	printf("offset recibido: %ld \n", offset);
-	printf("inode block idx: %ld\n", inode_block_idx);
-	printf("curr_block_offset: %ld\n", curr_block_offset);
-
 
 	byte *data_block = get_inode_block_n(inode, inode_block_idx);
 	if (!data_block) {
-		printf("aca no deberia entrar\n");
 		// If offset is exactly divisible by BLOCK_SIZE, the
 		// block will be NULL because it points to a new block
 		// that has to be allocated
