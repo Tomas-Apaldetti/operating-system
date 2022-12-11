@@ -16,9 +16,9 @@
 
 
 #define KiB 1024
-#define MiB 1024 * KiB
+#define MiB (1024 * KiB)
 
-#define BLOCK_SIZE 32 * KiB
+#define BLOCK_SIZE (32 * KiB)
 
 #define MAX_FILE_NAME 256
 #define MAX_PATH_LEN 2048
@@ -94,7 +94,7 @@ int search_inode(const char *path, inode_t **out);
 
 int new_inode(const char *path, mode_t mode, inode_t **out);
 
-int fiuba_unlink(const char *path);
+// int fiuba_unlink(const char *path);
 
 int dir_is_empty(inode_t *inode);
 
@@ -106,15 +106,17 @@ int fiuba_write(inode_t *inode, const char *buf, size_t size, off_t offset);
 
 int fiuba_read(const inode_t *inode, char *buffer, size_t size, off_t offset);
 
+int fiuba_readdir(inode_t *inode, void *buffer, fuse_fill_dir_t filler);
+
 int fiuba_access(inode_t *inode, int mask);
 
-int move_inode(const char *from, const char *to);
+// int move_inode(const char *from, const char *to);
 
 void notify_access(inode_t *inode, time_t *time);
 
 void notify_modif(inode_t *inode, time_t *time);
 
-int exchange_inodes(const char *path_one, const char *path_two);
+// int exchange_inodes(const char *path_one, const char *path_two);
 
 int deserialize(int fd);
 

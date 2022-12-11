@@ -48,7 +48,7 @@ fisopfs_getattr(const char *path, struct stat *st)
 static int
 fisopfs_mknod(const char *path, mode_t mode, dev_t rdev)
 {
-	printf("[debug] fisopfs_mknod \n");
+	printf("[debug] fisopfs_mknod with: %s \n", path);
 
 	inode_t *inode;
 	int result;
@@ -58,9 +58,11 @@ fisopfs_mknod(const char *path, mode_t mode, dev_t rdev)
 		return -EEXIST;
 
 	result = new_inode(path, mode, &inode);
+	printf("creo el inodo bien: %i\n", result);
+
 	if (result < 0)
 		return result;
-	return 0;
+	return EXIT_SUCCESS;
 }
 
 static int
@@ -72,7 +74,7 @@ fisopfs_mkdir(const char *path, mode_t mode)
 	int result = new_inode(path, mode, &inode);
 	if (result < 0)
 		return result;
-	return 0;
+	return EXIT_SUCCESS;
 }
 
 static int
@@ -80,7 +82,8 @@ fisopfs_unlink(const char *path)
 {
 	printf("[debug] fisopfs_unlink \n");
 
-	return fiuba_unlink(path);
+	// return fiuba_unlink(path);
+	return 0;
 }
 
 static int
@@ -96,7 +99,8 @@ fisopfs_rmdir(const char *path)
 	if (is_empty < 0)
 		return is_empty;
 	if (is_empty)
-		return fiuba_unlink(path);
+		// return fiuba_unlink(path);
+		return 0;
 	return -EINVAL;
 }
 
@@ -123,7 +127,7 @@ static int
 fisopfs_open(const char *path, struct fuse_file_info *fi)
 {
 	printf("[debug] fisopfs_open \n");
-	return -ENOENT;
+	return 0;
 }
 
 static int
@@ -150,7 +154,7 @@ fisopfs_write(const char *path,
               off_t offset,
               struct fuse_file_info *fi)
 {
-	printf("[debug] fisopfs_write \n");
+	printf("[debug] fisopfs_write with: %s \n", path);
 
 	// TODO: check permissions
 	inode_t *inode;
@@ -184,7 +188,7 @@ static int
 fisopfs_release(const char *path, struct fuse_file_info *fi)
 {
 	printf("[debug] fisopfs_release \n");
-	return -ENOENT;
+	return 0;
 }
 
 static int
@@ -211,7 +215,7 @@ fisopfs_readdir(const char *path,
                 off_t offset,
                 struct fuse_file_info *fi)
 {
-	printf("[debug] fisopfs_readdir(%s) \n", path);
+	printf("[debug] fisopfs_readdir with: %s \n", path);
 
 	inode_t *inode;
 
@@ -299,14 +303,14 @@ static int
 fisopfs_lock(const char *path, struct fuse_file_info *fi, int cmd, struct flock *locks)
 {
 	printf("[debug] fisopfs_lock \n");
-	return -ENOENT;
+	return 0;
 }
 
 static int
 fisopfs_utimens(const char *path, const struct timespec tv[2])
 {
 	printf("[debug] fisopfs_utimens \n");
-	return -ENOENT;
+	return 0;
 }
 
 static int
