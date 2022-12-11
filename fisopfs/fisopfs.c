@@ -36,7 +36,7 @@ fisopfs_getattr(const char *path, struct stat *st)
 	st->st_gid = inode->group_id;
 
 	st->st_size = inode->size;
-	st->st_blocks = inode->block_count;
+	st->st_blocks = inode->block_amount;
 
 	st->st_atime = inode->last_access;
 	st->st_mtime = inode->last_modification;
@@ -48,8 +48,16 @@ fisopfs_getattr(const char *path, struct stat *st)
 static int
 fisopfs_mknod(const char *path, mode_t mode, dev_t rdev)
 {
+	printf("[debug] fisopfs_mknod \n");
+
 	inode_t *inode;
-	int result = new_inode(path, mode, &inode);
+	int result;
+
+	result = search_inode(path, &inode);
+	if (result == EXIT_SUCCESS)
+		return -EEXIST;
+
+	result = new_inode(path, mode, &inode);
 	if (result < 0)
 		return result;
 	return 0;
@@ -58,6 +66,8 @@ fisopfs_mknod(const char *path, mode_t mode, dev_t rdev)
 static int
 fisopfs_mkdir(const char *path, mode_t mode)
 {
+	printf("[debug] fisopfs_mkdir \n");
+
 	inode_t *inode;
 	int result = new_inode(path, mode, &inode);
 	if (result < 0)
@@ -68,12 +78,16 @@ fisopfs_mkdir(const char *path, mode_t mode)
 static int
 fisopfs_unlink(const char *path)
 {
+	printf("[debug] fisopfs_unlink \n");
+
 	return fiuba_unlink(path);
 }
 
 static int
 fisopfs_rmdir(const char *path)
 {
+	printf("[debug] fisopfs_rmdir \n");
+
 	inode_t *inode;
 	int res = search_inode(path, &inode);
 	if (res < 0)
@@ -96,6 +110,8 @@ fisopfs_rename(const char *from, const char *to)
 static int
 fisopfs_truncate(const char *path, off_t size)
 {
+	printf("[debug] fisopfs_truncate \n");
+
 	inode_t *inode;
 	int res = search_inode(path, &inode);
 	if (res < 0)
@@ -117,6 +133,8 @@ fisopfs_read(const char *path,
              off_t offset,
              struct fuse_file_info *fi)
 {
+	printf("[debug] fisopfs_read \n");
+
 	// TODO: check permissions
 	inode_t *inode;
 	int res = search_inode(path, &inode);
@@ -132,6 +150,8 @@ fisopfs_write(const char *path,
               off_t offset,
               struct fuse_file_info *fi)
 {
+	printf("[debug] fisopfs_write \n");
+
 	// TODO: check permissions
 	inode_t *inode;
 	int res = search_inode(path, &inode);
@@ -191,16 +211,15 @@ fisopfs_readdir(const char *path,
                 off_t offset,
                 struct fuse_file_info *fi)
 {
-	// printf("[debug] fisopfs_readdir(%s) \n", path);
+	printf("[debug] fisopfs_readdir(%s) \n", path);
 
-	// inode_t *inode;
+	inode_t *inode;
 
-	// int response = search_inode(path, &inode);
-	// if (response != 0)
-	// 	return response;
+	int response = search_inode(path, &inode);
+	if (response != 0)
+		return response;
 
-	// return fiuba_read_dir(inode, buffer, filler);
-	return 0;
+	return fiuba_readdir(inode, buffer, filler);
 }
 
 
@@ -222,12 +241,16 @@ fisopfs_fsyncdir(const char *path, int isdatasync, struct fuse_file_info *fi)
 static void *
 fisopfs_init(struct fuse_conn_info *conn)
 {
+	printf("[debug] fisopfs_init \n");
+
 	return (void *) 0;
 }
 
 static void
 fisopfs_destroy(void *private_data)
 {
+	printf("[debug] fisopfs_destroy \n");
+
 	int res = persist();
 	if (res) {
 		printf("Can't persist the FS");
@@ -235,12 +258,18 @@ fisopfs_destroy(void *private_data)
 }
 
 static int
-fisopfs_access(const char *path,
-               int mask)  // en la docu de hmc aparece mode como mask, aunque no
-                          // se corresponde con la syscall normal (donde figura mode)
+fisopfs_access(const char *path, int mask)
 {
 	printf("[debug] fisopfs_access with: %s\n", path);
-	return 0;
+
+	inode_t *inode;
+	int response;
+
+	response = search_inode(path, &inode);
+	if (response < 0)
+		return -ENOENT;
+
+	return fiuba_access(inode, mask);
 }
 
 static int

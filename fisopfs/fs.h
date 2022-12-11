@@ -25,8 +25,11 @@
 
 #define MAX_INODE_BLOCK_PTR 13
 #define MAX_DIRECT_BLOCK_COUNT 12
+#define MAX_INDIRECT_BLOCK_COUNT BLOCK_SIZE / sizeof(int)
+#define MAX_BLOCK_COUNT MAX_DIRECT_BLOCK_COUNT + MAX_INDIRECT_BLOCK_COUNT
+
 #define INODE_ONE_LI_COUNT 13
-#define INODE_ONE_LI_INDEX 12
+#define INODE_INDIRECT_BLOCK_IDX 12
 
 #define DENTRY_EMPTY 0
 
@@ -74,8 +77,8 @@ typedef struct inode {
 	// Inode data
 	size_t size;
 	nlink_t link_count;
-	int related_block[MAX_INODE_BLOCK_PTR];  // 12 directos, 1 indirecto
-	blkcnt_t block_count;
+	int blocks[MAX_INODE_BLOCK_PTR];  // 12 directos, 1 indirecto
+	blkcnt_t block_amount;
 } inode_t;
 
 typedef struct dentry {
@@ -83,35 +86,35 @@ typedef struct dentry {
 	char file_name[MAX_FILE_NAME];
 } dentry_t;
 
-typedef bool (*dentry_iterator)(dentry_t *, void *);
+typedef int (*dentry_iterator)(dentry_t *, void *);
 
 void init_fs(void);
-
-inode_t *get_inode(ino_t);
 
 int search_inode(const char *path, inode_t **out);
 
 int new_inode(const char *path, mode_t mode, inode_t **out);
 
-int fiuba_unlink(const char* path);
+int fiuba_unlink(const char *path);
 
 int dir_is_empty(inode_t *inode);
 
-ino_t iterate_over_dir(const inode_t *inode, void *param, dentry_iterator f);
+int iterate_over_dir(const inode_t *inode, dentry_iterator func, void *param);
 
-int truncate_inode(inode_t* inode, off_t size);
+int truncate_inode(inode_t *inode, off_t size);
 
-long fiuba_write(inode_t *inode, const char *buf, size_t size, off_t offset);
+int fiuba_write(inode_t *inode, const char *buf, size_t size, off_t offset);
 
-long fiuba_read(const inode_t *inode, char *buffer, size_t size, off_t offset);
+int fiuba_read(const inode_t *inode, char *buffer, size_t size, off_t offset);
 
-int move_inode(const char* from, const char* to);
+int fiuba_access(inode_t *inode, int mask);
 
-void notify_access(inode_t* inode, time_t* time);
+int move_inode(const char *from, const char *to);
 
-void notify_modif(inode_t* inode, time_t* time);
+void notify_access(inode_t *inode, time_t *time);
 
-int exchange_inodes(const char* path_one, const char* path_two);
+void notify_modif(inode_t *inode, time_t *time);
+
+int exchange_inodes(const char *path_one, const char *path_two);
 
 int deserialize(int fd);
 
