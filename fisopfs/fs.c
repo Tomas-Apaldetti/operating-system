@@ -486,12 +486,24 @@ int
 deserialize_inode(int fd, ino_t inode_n)
 {
 	inode_t *inode = get_inode_n(inode_n);
+
 	size_t read_size = sizeof(inode_t);
 	ssize_t result = read(fd, inode, read_size);
 	if (result < read_size)
 		return -EIO;
 
 	size_t data_left_to_read = inode->size;
+
+	if (inode->size > 0) {
+		printf("INODE NUM %i      ", inode_n);
+		printf("INODE SIZE %i\n", inode->size);
+	}
+
+	if (inode_n == 2) {
+		printf("INODE NUM %i      ", inode_n);
+		printf("INODE SIZE %i\n", inode->size);
+	}
+
 	size_t curr_offset = 0;
 	while (data_left_to_read) {
 		char buffer[BLOCK_SIZE];
@@ -501,11 +513,14 @@ deserialize_inode(int fd, ino_t inode_n)
 		ssize_t result = read(fd, buffer, this_read_size);
 		if (result < this_read_size)
 			return -EIO;
+
 		fiuba_write(inode, buffer, this_read_size, curr_offset);
 
 		data_left_to_read -= this_read_size;
 		curr_offset += this_read_size;
 	}
+
+
 	return 0;
 }
 
@@ -519,6 +534,9 @@ serialize_inode(int fd, ino_t inode_n)
 	if (result < write_size)
 		return -EIO;
 
+	if (!INODE_BITMAP[inode_n])
+		return EXIT_SUCCESS;
+
 	size_t data_written = 0;
 	int curr_block = 0;
 	while (data_written < inode->size) {
@@ -526,6 +544,8 @@ serialize_inode(int fd, ino_t inode_n)
 		size_t this_write_size = inode->size - data_written >= BLOCK_SIZE
 		                                 ? BLOCK_SIZE
 		                                 : inode->size - data_written;
+
+
 		size_t result = write(fd, data, this_write_size);
 		if (result < this_write_size)
 			return -EIO;
@@ -533,7 +553,7 @@ serialize_inode(int fd, ino_t inode_n)
 		data_written += this_write_size;
 		curr_block++;
 	}
-	return 0;
+	return EXIT_SUCCESS;
 }
 
 /*  =============================================================
@@ -1112,7 +1132,6 @@ fiuba_write(inode_t *inode, const char *buffer, size_t size, off_t offset)
 
 		curr_block_offset++;
 		written++;
-		inode->size++;
 
 		if (curr_block_offset >= BLOCK_SIZE) {
 			curr_block_offset = 0;
@@ -1123,6 +1142,7 @@ fiuba_write(inode_t *inode, const char *buffer, size_t size, off_t offset)
 	if (!data_block)
 		return -ENOSPC;
 
+	inode->size = offset + size;
 	notify_access(inode);
 	notify_modif(inode);
 	return written;
@@ -1145,25 +1165,30 @@ fiuba_write(inode_t *inode, const char *buffer, size_t size, off_t offset)
 int
 deserialize(int fd)
 {
-	ssize_t operation_result = 0;
-	size_t operation_read_size = 0;
+	ssize_t result = 0;
+	size_t size_to_read;
+
 	superblock_t *superblock = SUPERBLOCK;
 	bool *inode_bitmap = INODE_BITMAP;
 
-	// Read Inode Bitmap to know the bitmap state
-	operation_read_size = sizeof(superblock_t);
-	operation_result = read(fd, superblock, operation_read_size);
+	// Read superblock
+	size_to_read = sizeof(superblock_t);
+	result = read(fd, superblock, size_to_read);
+	if (result < size_to_read)
+		return -EIO;
 
 	// Read Inode Bitmap to know the bitmap state
-	operation_read_size = superblock->inode_amount * sizeof(bool);
-	operation_result = read(fd, inode_bitmap, operation_read_size);
-	if (operation_result < operation_read_size)
+	size_to_read = superblock->inode_amount * sizeof(bool);
+	result = read(fd, inode_bitmap, size_to_read);
+	if (result < size_to_read)
 		return -EIO;
 
 	for (int i = 0; i < superblock->inode_amount; i++) {
-		operation_result = deserialize_inode(fd, i);
-		if (operation_result < 0)
-			return operation_result;
+		result = deserialize_inode(fd, i);
+		if (result < 0) {
+			printf("ERROR\n");
+			return result;
+		}
 	}
 	return 0;
 }
@@ -1179,7 +1204,6 @@ int
 serialize(int fd)
 {
 	ssize_t result = 0;
-	size_t operation_write_size = 0;
 	size_t size_to_write;
 
 	superblock_t *superblock = SUPERBLOCK;
@@ -1187,14 +1211,14 @@ serialize(int fd)
 
 	// write superblock
 	size_to_write = sizeof(superblock_t);
-	result = write(fd, inode_bitmap, size_to_write);
-	if (result < 0)
+	result = write(fd, superblock, size_to_write);
+	if (result < size_to_write)
 		return -EIO;
 
 	// write inode bitmap
 	size_to_write = superblock->inode_amount * sizeof(bool);
 	result = write(fd, inode_bitmap, size_to_write);
-	if (result < operation_write_size)
+	if (result < size_to_write)
 		return -EIO;
 
 	// move data block

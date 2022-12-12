@@ -282,10 +282,9 @@ fisopfs_init(struct fuse_conn_info *conn)
 {
 	printf("[debug] fisopfs_init \n");
 
-	init_fs();
 	int result = load_persist();
 	if (result < 0)
-		return (void *) result;
+		init_fs();
 
 	return (void *) 0;
 }
@@ -397,14 +396,16 @@ static struct fuse_operations operations = {
 int
 load_persist()
 {
-	int result = open("FS_State.fisopfs", O_RDONLY);
+	int result = open("fs_state.fisopfs", O_RDONLY);
 	if (result < 0)
 		return -EIO;
+
 	result = deserialize(result);
 	if (result < 0) {
 		close(result);
 		return -EIO;
 	};
+
 	close(result);
 	return 0;
 }
