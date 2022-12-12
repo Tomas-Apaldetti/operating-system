@@ -96,15 +96,13 @@ typedef int (*dentry_iterator)(dentry_t *, void *);
 
 void init_fs(void);
 
-int search_inode(const char *path, inode_t **out);
-
 int new_inode(const char *path, mode_t mode, inode_t **out);
 
-int fiuba_rmv_inode(const char *path, inode_t *inode_to_rmv, ino_t inode_to_rmv_n);
-
-bool dir_is_empty(inode_t *inode);
+int search_inode(const char *path, inode_t **out);
 
 int iterate_over_dir(const inode_t *inode, dentry_iterator func, void *param);
+
+bool dir_is_empty(inode_t *inode);
 
 int truncate_inode(inode_t *inode, off_t size);
 
@@ -113,6 +111,8 @@ int fiuba_write(inode_t *inode, const char *buf, size_t size, off_t offset);
 int fiuba_read(inode_t *inode, char *buffer, size_t size, off_t offset);
 
 int fiuba_readdir(inode_t *inode, void *buffer, fuse_fill_dir_t filler);
+
+int fiuba_rmv_inode(const char *path, inode_t *inode_to_rmv, ino_t inode_to_rmv_n);
 
 int fiuba_access(inode_t *inode, int mask);
 

@@ -6,20 +6,6 @@
 #include <stdbool.h>
 #include "fs.h"
 
-// Estructura
-// Primer Bloque: Superbloque - Bitmap
-// A partir del segundo bloque: Inodos
-
-// En total hay 6400 bloques de 32 KiB cada uno, lo cual llega a un total de 200
-// MiB. Si cada bloque tuviera un inodo asociado, seria un total de 6400 inodos
-// maximo Si cada inodo aproximadamente ocupa 64 bytes, por bloque podrian haber
-// 512 inodos, lo cual implica que los inodos ocuparan 13 bloques.
-// Esto generaria un total de 6386 bloques para datos
-
-// La conclusion de arriba puede que esté mal porque pesa mas cada inodo ahora.
-// Tambien habria que ver los tipos de datos que puse que los saque de
-// struct_stat.h asi directamente le podemos pasar la info de los inodos sin hacer calculos extras en el medio
-
 #define SUPERBLOCK ((superblock_t *) blocks)
 #define BLOCK(n) (void *) ((byte *) blocks + BLOCK_SIZE * (n))
 #define DATA_BITMAP ((bool *) (SUPERBLOCK + 1))
@@ -27,7 +13,6 @@
 	((bool *) (DATA_BITMAP + ((SUPERBLOCK)->data_blocks_amount)))
 #define INODE_BLOCKS BLOCK(SUPERBLOCK->inode_start)
 #define DATA_BLOCKS BLOCK(SUPERBLOCK->data_start)
-
 
 #define EMPTY_DIRENTRY 0
 #define ROOT_INODE 1
@@ -54,8 +39,6 @@ void init_data_blocks_dir(inode_t *directory, const ino_t dot, const ino_t dotdo
 
 void *get_inode_block(const inode_t *inode, int block_number);
 
-int next_token(const char *path, int offset, char *buffer, int limit, int *rest);
-
 int insert_direntry_if_free(dentry_t *curr, void *_new_entry);
 
 int search_parent_directory(const char *path, inode_t **out);
@@ -64,17 +47,11 @@ ino_t search_dir_inode_n(const inode_t *directory, const char *inode_name);
 
 int search_free_inode(mode_t mode, inode_t **out);
 
-// int link_to_inode(ino_t parent_n, ino_t child_n, const char *child_name);
-
 void deallocate_block(int block_n);
 
 void *get_block_n(int block_n);
 
-// int search_parent(const char *path, ino_t *parent, int *name_offset_from_path);
-
 ino_t unlink_inode(const inode_t *inode, const char *dir_name);
-
-int chcount(char c, const char *s);
 
 bool is_free_dentry(dentry_t *dentry);
 
@@ -295,24 +272,6 @@ get_inode_block_n(const inode_t *inode, int block_n)
 	return inode->blocks[block_n];
 }
 
-void
-notify_access(inode_t *inode)
-{
-	time_t new_time = time(NULL);
-	if (!inode)
-		return;
-	inode->last_access = new_time;
-}
-
-void
-notify_modif(inode_t *inode)
-{
-	time_t new_time = time(NULL);
-	if (!inode)
-		return;
-	inode->last_modification = new_time;
-}
-
 int
 search_free_inode(mode_t mode, inode_t **out)
 {
@@ -421,20 +380,6 @@ remove_from_parent(const char *path)
 	return result;
 }
 
-// int
-// insert_into_parent(const char *path, ino_t inode_n)
-// {
-// 	int name_offset;
-// 	ino_t parent;
-
-// 	inode_t *parent_inode;
-// 	int result = search_parent_directory(path, &parent_inode);
-// 	if (result < 0)
-// 		return result;
-
-// 	return link_to_inode(parent, inode_n, path + name_offset);
-// }
-
 int
 fiuba_rmv_inode(const char *path, inode_t *inode_to_rmv, ino_t inode_to_rmv_n)
 {
@@ -445,42 +390,6 @@ fiuba_rmv_inode(const char *path, inode_t *inode_to_rmv, ino_t inode_to_rmv_n)
 	substract_link(inode_to_rmv, inode_to_rmv_n);
 	return EXIT_SUCCESS;
 }
-
-
-// int
-// move_inode(const char *from, const char *to)
-// {
-// 	// Remove from old
-// 	ino_t to_delete = remove_from_parent(from);
-// 	if (to_delete < 0)
-// 		return to_delete;
-
-// 	// Link to new
-// 	int result = insert_into_parent(to, to_delete);
-// 	if (result < 0) {
-// 		// Guaranteed not to fail, because it was recently removed from
-// 		it.insert_into_parent(from, to_delete);
-// 	}
-// 	return result;
-// }
-
-
-// int
-// exchange_inodes(const char *path_one, const char *path_two)
-// {
-// 	// All the insert operations here are guaranteed not to fail due to name
-// 	collission.ino_t inode_one = remove_from_parent(path_one);
-// 	if (inode_one < 0)
-// 		return inode_one;
-// 	ino_t inode_two = remove_from_parent(path_two);
-// 	if (inode_two < 0) {
-// 		insert_into_parent(path_one, inode_one);
-// 		return inode_two;
-// 	}
-// 	insert_into_parent(path_one, inode_two);
-// 	insert_into_parent(path_two, inode_one);
-// 	return 0;
-// }
 
 int
 deserialize_inode(int fd, ino_t inode_n)
@@ -556,6 +465,102 @@ serialize_inode(int fd, ino_t inode_n)
 	return EXIT_SUCCESS;
 }
 
+ino_t
+unlink_inode(const inode_t *inode, const char *dir_name)
+{
+	return iterate_over_dir(inode, remove_dentry, (void *) dir_name);
+}
+
+int
+iterate_over_one_block_dir(const inode_t *inode,
+                           dentry_iterator func,
+                           void *param,
+                           void *block,
+                           int *curr_iter_size)
+{
+	dentry_t *curr_dentry = (dentry_t *) block;
+	dentry_t *last_dentry = curr_dentry + (BLOCK_SIZE / sizeof(dentry_t)) - 1;
+
+	int response;
+
+	while ((inode->size > (*curr_iter_size)) && curr_dentry <= last_dentry) {
+		response = func(curr_dentry, param);
+		if (response != 0)
+			return response;
+		(*curr_iter_size) += sizeof(dentry_t);
+		curr_dentry++;
+	}
+
+	return 0;
+}
+
+/// @brief Iterator over a Inode that is a directory.
+/// For each entry in the directory calls the function with the dentry and the
+/// param passed by parameter. Iterates until the function return true or until
+/// the directory is fully consumed.
+/// @param inode Directory inode
+/// @param param Param passed to the function. Responsability of the caller to
+/// know what the pointer represents.
+/// @param f Function called for each dentry in the directory
+/// @return -ENOTDIR should the inode not be a directory.
+/// -ENOENT should the directory be fully consumed in the iteration
+/// Number greater than 0 should, indicating the inode number of the dentry that
+/// made the function return true.
+int
+iterate_over_dir(const inode_t *inode, dentry_iterator func, void *param)
+{
+	if (!(S_ISDIR(inode->type_mode)))
+		return -ENOTDIR;
+
+	int curr_inode_block = 0;  // block idx
+	int curr_iter_size = 0;
+
+	dentry_t *curr_dentry = get_inode_block(inode, curr_inode_block);
+	while (curr_dentry && curr_iter_size < inode->size) {
+		// cero -> sigo iterando
+		// > cero -> freno iteracion forzado
+		// < cero -> freno iteracion debido a error
+		int response = iterate_over_one_block_dir(
+		        inode, func, param, curr_dentry, &curr_iter_size);
+		if (response != 0)
+			return response;
+
+		curr_inode_block++;
+		curr_dentry = get_inode_block(inode, curr_inode_block);
+	}
+	return 0;
+}
+
+ino_t
+search_dir_inode_n(const inode_t *inode, const char *dir_name)
+{
+	return iterate_over_dir(inode, is_dentry_searched, (void *) dir_name);
+}
+
+/*  =============================================================
+ *  ========================= NOTIFY ============================
+ *  =============================================================
+ */
+
+void
+notify_access(inode_t *inode)
+{
+	time_t new_time = time(NULL);
+	if (!inode)
+		return;
+	inode->last_access = new_time;
+}
+
+void
+notify_modif(inode_t *inode)
+{
+	time_t new_time = time(NULL);
+	if (!inode)
+		return;
+	inode->last_modification = new_time;
+}
+
+
 /*  =============================================================
  *  ========================= BLOCKS ============================
  *  =============================================================
@@ -565,21 +570,6 @@ void *
 get_block_n(int block_n)
 {
 	return BLOCK((SUPERBLOCK->data_start + block_n));
-}
-
-int
-search_free_block()
-{
-	bool *block_bitmap = DATA_BITMAP;
-	superblock_t *superblock = SUPERBLOCK;
-
-	for (int i = 0; i < superblock->data_blocks_amount; i++) {
-		if (!block_bitmap[i]) {
-			block_bitmap[i] = true;
-			return i;
-		}
-	}
-	return -ENOSPC;
 }
 
 void *
@@ -677,27 +667,6 @@ init_data_blocks_dir(inode_t *dir_inode, const ino_t dot, const ino_t dotdot)
 	fiuba_write(dir_inode, (char *) &dentries, sizeof(dentries), dir_inode->size);
 }
 
-int
-fiuba_access(inode_t *inode, int mask)
-{
-	if ((R_OK & mask) &&
-	    !((inode->type_mode & S_IRUSR) && (inode->type_mode & S_IRGRP))) {
-		return -EXIT_FAILURE;
-	}
-
-	if ((W_OK & mask) &&
-	    !((inode->type_mode & S_IWUSR) && (inode->type_mode & S_IWGRP))) {
-		return -EXIT_FAILURE;
-	}
-
-	if ((X_OK & mask) &&
-	    !((inode->type_mode & S_IXUSR) && (inode->type_mode & S_IXGRP))) {
-		return -EXIT_FAILURE;
-	}
-
-	return EXIT_SUCCESS;
-}
-
 bool
 is_free_dentry(dentry_t *dentry)
 {
@@ -719,9 +688,9 @@ is_dentry_searched(dentry_t *dentry, void *_dir_name)
 int
 search_first_file(dentry_t *dentry, void *_)
 {
-	printf("DENTRY NAME %s\n", dentry->file_name);
-	if (is_free_dentry(dentry) || (strcmp(dentry->file_name, ".") == 0) ||
-	    (strcmp(dentry->file_name, "..") == 0)) {
+	s if (is_free_dentry(dentry) || (strcmp(dentry->file_name, ".") == 0) ||
+	      (strcmp(dentry->file_name, "..") == 0))
+	{
 		return 0;
 	}
 
@@ -753,78 +722,6 @@ remove_dentry(dentry_t *entry, void *_dir_name)
 	return false;
 }
 
-ino_t
-unlink_inode(const inode_t *inode, const char *dir_name)
-{
-	return iterate_over_dir(inode, remove_dentry, (void *) dir_name);
-}
-
-int
-iterate_over_one_block_dir(const inode_t *inode,
-                           dentry_iterator func,
-                           void *param,
-                           void *block,
-                           int *curr_iter_size)
-{
-	dentry_t *curr_dentry = (dentry_t *) block;
-	dentry_t *last_dentry = curr_dentry + (BLOCK_SIZE / sizeof(dentry_t)) - 1;
-
-	int response;
-
-	while ((inode->size > (*curr_iter_size)) && curr_dentry <= last_dentry) {
-		response = func(curr_dentry, param);
-		if (response != 0)
-			return response;
-		(*curr_iter_size) += sizeof(dentry_t);
-		curr_dentry++;
-	}
-
-	return 0;
-}
-
-/// @brief Iterator over a Inode that is a directory.
-/// For each entry in the directory calls the function with the dentry and the
-/// param passed by parameter. Iterates until the function return true or until
-/// the directory is fully consumed.
-/// @param inode Directory inode
-/// @param param Param passed to the function. Responsability of the caller to
-/// know what the pointer represents.
-/// @param f Function called for each dentry in the directory
-/// @return -ENOTDIR should the inode not be a directory.
-/// -ENOENT should the directory be fully consumed in the iteration
-/// Number greater than 0 should, indicating the inode number of the dentry that
-/// made the function return true.
-int
-iterate_over_dir(const inode_t *inode, dentry_iterator func, void *param)
-{
-	if (!(S_ISDIR(inode->type_mode)))
-		return -ENOTDIR;
-
-	int curr_inode_block = 0;  // block idx
-	int curr_iter_size = 0;
-
-	dentry_t *curr_dentry = get_inode_block(inode, curr_inode_block);
-	while (curr_dentry && curr_iter_size < inode->size) {
-		// cero -> sigo iterando
-		// > cero -> freno iteracion forzado
-		// < cero -> freno iteracion debido a error
-		int response = iterate_over_one_block_dir(
-		        inode, func, param, curr_dentry, &curr_iter_size);
-		if (response != 0)
-			return response;
-
-		curr_inode_block++;
-		curr_dentry = get_inode_block(inode, curr_inode_block);
-	}
-	return 0;
-}
-
-ino_t
-search_dir_inode_n(const inode_t *inode, const char *dir_name)
-{
-	return iterate_over_dir(inode, is_dentry_searched, (void *) dir_name);
-}
-
 int
 insert_direntry_if_free(dentry_t *curr, void *_new_entry)
 {
@@ -832,92 +729,56 @@ insert_direntry_if_free(dentry_t *curr, void *_new_entry)
 	if (is_free_dentry(curr)) {
 		curr->inode_number = new_entry->inode_number;
 		strcpy(curr->file_name, new_entry->file_name);
-		return new_entry->inode_number;  // Si encontro dentry libre inserta el nuevo
+		return new_entry->inode_number;
 	}
-	// faltaria inicializar bien el inodo
-	return 0;  // Si el dentry actual no estaba libre, para seguir iter
+	return 0;
 }
 
-// Reemplazada por add_inode_to_directory
-// int
-// link_to_inode(ino_t parent_n, ino_t child_n, const char *child_name)
-// {
-// 	if (strlen(child_name) > MAX_FILE_NAME)
-// 		return -EINVAL;
+/*  =============================================================
+ *  ========================== ACCESS ===========================
+ *  =============================================================
+ */
 
-// 	inode_t *parent = get_inode_n(parent_n);
-// 	// Already exists, fail
-// 	if (search_dir(parent, child_name) > 0)
-// 		return -EINVAL;
+int
+fiuba_access(inode_t *inode, int mask)
+{
+	if ((R_OK & mask) &&
+	    !((inode->type_mode & S_IRUSR) && (inode->type_mode & S_IRGRP))) {
+		return -EXIT_FAILURE;
+	}
 
-// 	dentry_t new_dentry = { .file_name = { 0 }, .inode_number = child_n };
-// 	strcpy(new_dentry.file_name, child_name, MAX_FILE_NAME);
+	if ((W_OK & mask) &&
+	    !((inode->type_mode & S_IWUSR) && (inode->type_mode & S_IWGRP))) {
+		return -EXIT_FAILURE;
+	}
 
-// 	int middle = iterate_over_dir(parent,
-// 	                              (void *) &new_dentry,
-// 	                              insert_direntry_if_free);
+	if ((X_OK & mask) &&
+	    !((inode->type_mode & S_IXUSR) && (inode->type_mode & S_IXGRP))) {
+		return -EXIT_FAILURE;
+	}
 
-// 	if (middle < 0) {
-// 		fiuba_write(parent,
-// 		            (char *) &new_dentry,
-// 		            sizeof(dentry_t),
-// 		            parent->size);
-// 	}
-// 	return 0;
-// }
+	return EXIT_SUCCESS;
+}
 
 /*  =============================================================
  *  ========================== SEARCH ===========================
  *  =============================================================
  */
 
-// int
-// chcount(char c, const char *s)
-// {
-// 	int count = 0;
-// 	for (int i = 0; s[i]; i++)
-// 		if (s[i] == c)
-// 			count++;
-// 	return count;
-// }
+int
+search_free_block()
+{
+	bool *block_bitmap = DATA_BITMAP;
+	superblock_t *superblock = SUPERBLOCK;
 
-
-/// @brief Copies into the buffer at most limit characters. Zero terminates the
-/// string resultant in the buffer. Is responsability of the caller to ensure
-/// that the buffer has enough space for the new string. (Should be at least
-/// limit + 1 size)
-/// @param path String that will be copied until the next token
-/// @param offset offset into the path. Zero index, assumes that always start
-/// with '/'
-/// @param buffer Buffer where the string will be copied
-/// @param limit At most limit bytes copied
-/// @param rest Pointer to an int, where, should exist, the amount of '/' rest
-/// in the path should be saved.
-/// @return -1 in case the token is larger than limit (In other words, if any
-/// other char other than '/' or '\0' is in the new offset). An integer greater
-/// than 0, showing the offset position into the path of the next separator
-// int
-// next_token(const char *path, int offset, char *buffer, int limit, int *rest)
-// {
-// 	int path_index = offset + 1;  // Skip '/' that will be at the start
-// 	int buffer_idx = 0;
-
-// 	while (path[path_index] != '/' && path[path_index] != '\0' &&
-// 	       buffer_idx < limit) {
-// 		buffer[buffer_idx] = path[path_index];
-// 		buffer_idx++;
-// 		path_index++;
-// 	}
-// 	buffer[buffer_idx + 1] = '\0';
-
-// 	bool token_finished = path[path_index] == '/' || path[path_index] ==
-// '\0'; 	if (buffer_idx == limit && !token_finished) 		return -EINVAL;
-
-// 	if (rest)
-// 		*rest = chcount('/', path + path_index + 1);
-// 	return path_index;
-// }
-
+	for (int i = 0; i < superblock->data_blocks_amount; i++) {
+		if (!block_bitmap[i]) {
+			block_bitmap[i] = true;
+			return i;
+		}
+	}
+	return -ENOSPC;
+}
 
 int
 get_first_file_name(const char *path, char *buffer)
@@ -1012,39 +873,6 @@ search_parent_directory(const char *path, inode_t **out)
 
 	return search_inode(buffer, out);
 }
-
-// Reemplazada por search_parent_directory
-// int
-// search_parent(const char *path, ino_t *parent, int *name_offset_from_path)
-// {
-// 	inode_t *curr_inode = get_inode_n(ROOT_INODE);
-
-// 	if (strcmp(path, "/") == 0) {
-// 		return -EINVAL;
-// 	}
-
-// 	char buffer[MAX_FILE_NAME + 1] = { 0 };
-// 	int curr_offset = 0;
-// 	int rest = 1;
-// 	ino_t parent_inode;
-// 	while (rest) {
-// 		curr_offset =
-// 		        next_token(path, curr_offset, buffer, MAX_FILE_NAME, &rest);
-// 		if (curr_offset < 0)
-// 			return -EINVAL;
-// 		parent_inode = search_dir(curr_inode, buffer);
-// 		if (parent_inode < 0)
-// 			return parent_inode;
-// 		curr_inode = get_inode_n(parent_inode);
-// 	}
-
-// 	if (!(S_ISDIR(curr_inode->type_mode)))
-// 		return -ENOTDIR;
-
-// 	*parent = parent_inode;
-// 	*name_offset_from_path = curr_offset + 1;
-// 	return 0;
-// }
 
 
 /*  =============================================================

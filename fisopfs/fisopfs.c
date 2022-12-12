@@ -176,6 +176,7 @@ fisopfs_rename(const char *from, const char *to)
 {
 	printf("[debug] fisopfs_rename \n");
 
+
 	return -ENOENT;
 }
 
