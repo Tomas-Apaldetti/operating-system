@@ -35,6 +35,9 @@
 
 #define DIR_TYPE_MODE                                                          \
 	(__S_IFDIR | S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH)
+#define REG_TYPE_MODE                                                          \
+	(__S_IFREG | S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH)
+
 
 #define P_OX 0x1
 #define P_OW 0x2
@@ -107,25 +110,14 @@ int truncate_inode(inode_t *inode, off_t size);
 
 int fiuba_write(inode_t *inode, const char *buf, size_t size, off_t offset);
 
-int fiuba_read(const inode_t *inode, char *buffer, size_t size, off_t offset);
+int fiuba_read(inode_t *inode, char *buffer, size_t size, off_t offset);
 
 int fiuba_readdir(inode_t *inode, void *buffer, fuse_fill_dir_t filler);
 
 int fiuba_access(inode_t *inode, int mask);
 
-// int move_inode(const char *from, const char *to);
-
-void notify_access(inode_t *inode, time_t *time);
-
-void notify_modif(inode_t *inode, time_t *time);
-
-// int exchange_inodes(const char *path_one, const char *path_two);
-
 int deserialize(int fd);
 
 int serialize(int fd);
-
-
-// void set_type(inode_t *inode, mode_t type);
 
 #endif  // _FISOP_FS_

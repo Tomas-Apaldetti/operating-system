@@ -78,6 +78,10 @@ int chcount(char c, const char *s);
 
 bool is_free_dentry(dentry_t *dentry);
 
+void notify_access(inode_t *inode);
+
+void notify_modif(inode_t *inode);
+
 
 byte blocks[FS_SIZE] = { 0 };  // ~200 MiB
 
@@ -292,26 +296,20 @@ get_inode_block_n(const inode_t *inode, int block_n)
 }
 
 void
-notify_access(inode_t *inode, time_t *t)
+notify_access(inode_t *inode)
 {
 	time_t new_time = time(NULL);
 	if (!inode)
 		return;
-	if (t) {
-		new_time = *t;
-	}
 	inode->last_access = new_time;
 }
 
 void
-notify_modif(inode_t *inode, time_t *t)
+notify_modif(inode_t *inode)
 {
 	time_t new_time = time(NULL);
 	if (!inode)
 		return;
-	if (t) {
-		new_time = *t;
-	}
 	inode->last_modification = new_time;
 }
 
@@ -358,16 +356,45 @@ substract_link(inode_t *inode_to_rmv, ino_t inode_to_rmv_n)
 }
 
 int
+fill_with_null_bytes(inode_t *inode, size_t size)
+{
+	char buffer[KiB] = { 0 };
+	size_t size_to_fill = KiB;
+
+	off_t offset = size - inode->size;
+
+	int result;
+
+	if (offset < size_to_fill)
+		size_to_fill = offset;
+
+	while (offset > 0) {
+		result = fiuba_write(inode, buffer, offset, inode->size);
+		if (result < 0)
+			return result;
+
+		offset -= size_to_fill;
+
+		if (offset < size_to_fill)
+			size_to_fill = offset;
+	}
+
+	return EXIT_SUCCESS;
+}
+
+int
 truncate_inode(inode_t *inode, off_t size)
 {
 	if (inode->size < size)
-		return -EINVAL;
+		return fill_with_null_bytes(inode, size);
 
 	int block_n = size / BLOCK_SIZE;
 	block_n += size % BLOCK_SIZE != 0 ? 1 : 0;
+
 	deallocate_blocks_from_inode(inode, block_n);
+
 	inode->size = size;
-	return 0;
+	return EXIT_SUCCESS;
 }
 
 int
@@ -486,6 +513,7 @@ int
 serialize_inode(int fd, ino_t inode_n)
 {
 	inode_t *inode = get_inode_n(inode_n);
+
 	size_t write_size = sizeof(inode_t);
 	ssize_t result = write(fd, inode, write_size);
 	if (result < write_size)
@@ -494,7 +522,7 @@ serialize_inode(int fd, ino_t inode_n)
 	size_t data_written = 0;
 	int curr_block = 0;
 	while (data_written < inode->size) {
-		char *data = (char *) get_inode_block(inode, curr_block);
+		char *data = get_inode_block(inode, curr_block);
 		size_t this_write_size = inode->size - data_written >= BLOCK_SIZE
 		                                 ? BLOCK_SIZE
 		                                 : inode->size - data_written;
@@ -680,7 +708,6 @@ search_first_file(dentry_t *dentry, void *_)
 	return dentry->inode_number;
 }
 
-
 bool
 dir_is_empty(inode_t *inode)
 {
@@ -824,15 +851,15 @@ insert_direntry_if_free(dentry_t *curr, void *_new_entry)
  *  =============================================================
  */
 
-int
-chcount(char c, const char *s)
-{
-	int count = 0;
-	for (int i = 0; s[i]; i++)
-		if (s[i] == c)
-			count++;
-	return count;
-}
+// int
+// chcount(char c, const char *s)
+// {
+// 	int count = 0;
+// 	for (int i = 0; s[i]; i++)
+// 		if (s[i] == c)
+// 			count++;
+// 	return count;
+// }
 
 
 /// @brief Copies into the buffer at most limit characters. Zero terminates the
@@ -1005,7 +1032,7 @@ search_parent_directory(const char *path, inode_t **out)
  *  =============================================================
  */
 int
-fiuba_read(const inode_t *inode, char *buffer, size_t size, off_t offset)
+fiuba_read(inode_t *inode, char *buffer, size_t size, off_t offset)
 {
 	if (inode->size < offset)
 		return -EINVAL;
@@ -1031,7 +1058,7 @@ fiuba_read(const inode_t *inode, char *buffer, size_t size, off_t offset)
 			curr_block_offset = 0;
 		}
 	}
-
+	notify_access(inode);
 	return read;
 }
 
@@ -1095,6 +1122,9 @@ fiuba_write(inode_t *inode, const char *buffer, size_t size, off_t offset)
 
 	if (!data_block)
 		return -ENOSPC;
+
+	notify_access(inode);
+	notify_modif(inode);
 	return written;
 }
 
@@ -1121,6 +1151,10 @@ deserialize(int fd)
 	bool *inode_bitmap = INODE_BITMAP;
 
 	// Read Inode Bitmap to know the bitmap state
+	operation_read_size = sizeof(superblock_t);
+	operation_result = read(fd, superblock, operation_read_size);
+
+	// Read Inode Bitmap to know the bitmap state
 	operation_read_size = superblock->inode_amount * sizeof(bool);
 	operation_result = read(fd, inode_bitmap, operation_read_size);
 	if (operation_result < operation_read_size)
@@ -1144,21 +1178,31 @@ deserialize(int fd)
 int
 serialize(int fd)
 {
-	ssize_t operation_result = 0;
+	ssize_t result = 0;
 	size_t operation_write_size = 0;
+	size_t size_to_write;
+
 	superblock_t *superblock = SUPERBLOCK;
 	bool *inode_bitmap = INODE_BITMAP;
 
-	operation_write_size = superblock->inode_amount * sizeof(bool);
-	operation_result = write(fd, inode_bitmap, operation_write_size);
-	if (operation_result < operation_write_size)
+	// write superblock
+	size_to_write = sizeof(superblock_t);
+	result = write(fd, inode_bitmap, size_to_write);
+	if (result < 0)
 		return -EIO;
 
+	// write inode bitmap
+	size_to_write = superblock->inode_amount * sizeof(bool);
+	result = write(fd, inode_bitmap, size_to_write);
+	if (result < operation_write_size)
+		return -EIO;
+
+	// move data block
 	for (int i = 0; i < superblock->inode_amount; i++) {
-		operation_result = serialize_inode(fd, i);
-		if (operation_result < 0)
-			return operation_result;
+		result = serialize_inode(fd, i);
+		if (result < 0)
+			return result;
 	}
 
-	return 0;
+	return EXIT_SUCCESS;
 }
