@@ -51,7 +51,37 @@ struct dentry {
 
 Un inodo que tenga como tipo de archivo que es un directorio, la informacion que almacenara en los bloques sera un arreglo de `dentry`. Una dentry tendra el numero de inodo al que pertenece y el nombre del inodo dado por el usuario. En caso de que una dentry se encuentre vacia, tendra como numero de inodo el 0, el cual esta reservado para ese proposito. Todo directorio, tendra al menos los pseudo directorios '.' y '..'. 
 
-### Serializacion
+## Serializacion
 
-A fin de serializar el *filesystem*, primero se serializa el bitmap de todos los `inodos`. Esto se hace, ya que los `inodos` se guardan ya sea si estan ocupados o no, a fin de mantener el numero de inodo al que apunta cada dentry consistente cuando se cargue denuevo el *filesystem*. Luego se serializara, el `inodo` **i**, guardando todo la estructura completa, y de forma adyacente, toda la informacion del usuario que apunta ese `inodo`. De esta forma, al cargar denuevo el sistema de archivos desde un archivo, se puede asegurar que la informacion del usuario se encuentra completa, en el `inodo` en el que se estaba usando al momento de serializar. No se garantiza que los numeros de los bloques usados para albergar la informacion del usuario sean los mismos.
+A fin de serializar el *filesystem*, primero se serializa el superbloque para almacenar la metadata general, seguido del bitmap de todos los `inodos`. Esto se hace, ya que los `inodos` se guardan ya sea si estan ocupados o no, a fin de mantener el numero de inodo al que apunta cada dentry consistente cuando se cargue denuevo el *filesystem*. Luego se serializara, el `inodo` **i**, guardando todo la estructura completa, y de forma adyacente, toda la informacion del usuario que apunta ese `inodo`. De esta forma, al cargar denuevo el sistema de archivos desde un archivo, se puede asegurar que la informacion del usuario se encuentra completa, en el `inodo` en el que se estaba usando al momento de serializar. No se garantiza que los numeros de los bloques usados para albergar la informacion del usuario sean los mismos.
+
+
+## Busqueda de archivos dado un path
+
+Para la busqueda de archivos y directorios se tienen varias funciones auxiliares. En especifico la más relevante es `search_inode`, la cual realiza ciertas verificaciones/parseo del path para posteriormente: 
+1. Obtener el inodo root
+2. Realizar una busqueda recursiva por cada *token* encontrado en el path hasta hallar el inodo del ultimo nombre encontrado (con token hacemos referencia a un nombre individual de archivo o directorio. Por ejemplo para `/foo/bar/spam/eggs` la busqueda finalizaria por encontrar el inodo de `eggs`)
+
+Cabe mencionar a `iterate_over_dir` como una de las funciones auxiliares más utilizadas, la cual dado un inodo correspondiente a un directorio, recorre todas sus direntries aplicando una función dada por parametro (`dentry_iterator_func`) 
+
+## Ejecuciones de prueba junto con salidas esperadas
+
+Para la revisión de funcionamiento de funcionalidades se probó la ejecución de las siguientes secuencias de comandos en bash:
+- Creación de archivos (`touch`, redirección de escritura, redirección de escritura en modo append), lectura de archivos (con cat, more, less), Escritura de archivos (sobre-escritura y append con redirecciones):
+    ![cap1](./imgs_para_informe/cap1.png)
+    ![cap2](./imgs_para_informe/cap2.png)
+    ![cap3](./imgs_para_informe/cap3.png)
+
+- Borrado de un archivo (con `rm` o `unlink`):
+    ![cap4](./imgs_para_informe/cap4.png)
+    ![cap5](./imgs_para_informe/cap5.png)
+
+- Creación de directorios (con `mkdir`), lectura de directorios, incluyendo los pseudo-directorios . y .. (con `ls -al`), borrado de un directorio (con `rmdir`), la creación de directorios soporta al menos un nivel de recursión:
+    ![cap6](./imgs_para_informe/cap6.png)
+    - (`rmdir` no permite si el dir tiene contenidos):
+    ![cap7](./imgs_para_informe/cap7.png)
+
+- Acceder a las estadísticas de los archivos (con stat):
+    ![cap8](./imgs_para_informe/cap8.png)
+
 
