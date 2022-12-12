@@ -76,6 +76,9 @@ static int fisopfs_fgetattr(const char *path,
                             struct fuse_file_info *fi);
 
 static int fisopfs_utimens(const char *path, const struct timespec tv[2]);
+
+int load_persist();
+
 //========
 
 static int
@@ -169,15 +172,6 @@ fisopfs_rmdir(const char *path)
 		return -ENOTEMPTY;
 
 	return fiuba_rmv_inode(path, inode_to_rmv, inode_to_rmv_n);
-}
-
-static int
-fisopfs_rename(const char *from, const char *to)
-{
-	printf("[debug] fisopfs_rename \n");
-
-
-	return -ENOENT;
 }
 
 static int
@@ -378,16 +372,15 @@ static struct fuse_operations operations = {
 
 	.init = fisopfs_init,
 
-	.getattr = fisopfs_getattr, .access = fisopfs_access,
+	.getattr = fisopfs_getattr,   .access = fisopfs_access,
 	.utimens = fisopfs_utimens,
 
-	.mknod = fisopfs_mknod,     .unlink = fisopfs_unlink,
-	.rename = fisopfs_rename,   .truncate = fisopfs_truncate,
-	.open = fisopfs_open,       .read = fisopfs_read,
-	.write = fisopfs_write,
+	.mknod = fisopfs_mknod,       .unlink = fisopfs_unlink,
+	.truncate = fisopfs_truncate, .open = fisopfs_open,
+	.read = fisopfs_read,         .write = fisopfs_write,
 
-	.mkdir = fisopfs_mkdir,     .rmdir = fisopfs_rmdir,
-	.opendir = fisopfs_opendir, .readdir = fisopfs_readdir,
+	.mkdir = fisopfs_mkdir,       .rmdir = fisopfs_rmdir,
+	.opendir = fisopfs_opendir,   .readdir = fisopfs_readdir,
 
 	.flush = fisopfs_flush,
 

@@ -59,6 +59,11 @@ void notify_access(inode_t *inode);
 
 void notify_modif(inode_t *inode);
 
+int remove_dentry(dentry_t *entry, void *_dir_name);
+
+int is_dentry_searched(dentry_t *dentry, void *_dir_name);
+
+int search_free_block();
 
 byte blocks[FS_SIZE] = { 0 };  // ~200 MiB
 
@@ -403,16 +408,6 @@ deserialize_inode(int fd, ino_t inode_n)
 
 	size_t data_left_to_read = inode->size;
 
-	if (inode->size > 0) {
-		printf("INODE NUM %i      ", inode_n);
-		printf("INODE SIZE %i\n", inode->size);
-	}
-
-	if (inode_n == 2) {
-		printf("INODE NUM %i      ", inode_n);
-		printf("INODE SIZE %i\n", inode->size);
-	}
-
 	size_t curr_offset = 0;
 	while (data_left_to_read) {
 		char buffer[BLOCK_SIZE];
@@ -688,9 +683,8 @@ is_dentry_searched(dentry_t *dentry, void *_dir_name)
 int
 search_first_file(dentry_t *dentry, void *_)
 {
-	s if (is_free_dentry(dentry) || (strcmp(dentry->file_name, ".") == 0) ||
-	      (strcmp(dentry->file_name, "..") == 0))
-	{
+	if (is_free_dentry(dentry) || (strcmp(dentry->file_name, ".") == 0) ||
+	    (strcmp(dentry->file_name, "..") == 0)) {
 		return 0;
 	}
 
@@ -733,6 +727,7 @@ insert_direntry_if_free(dentry_t *curr, void *_new_entry)
 	}
 	return 0;
 }
+
 
 /*  =============================================================
  *  ========================== ACCESS ===========================
